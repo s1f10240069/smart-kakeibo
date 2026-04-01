@@ -124,13 +124,9 @@ export default function App() {
     }
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      Papa.parse(event.target.result, {
+  const parseOneFile = (csvText, currentDB, customRulesSnapshot) => {
+    return new Promise((resolve) => {
+      Papa.parse(csvText, {
         skipEmptyLines: true,
         complete: (results) => {
           const rawTxs = [];
@@ -139,7 +135,7 @@ export default function App() {
               let date = row[1] ? row[1].trim() : "不明な日付";
               const desc = row[2] ? row[2].trim() : "不明な取引";
               const amount = parseFloat(row[4]) || 0;
-              const catKey = categorize(desc, customRules);
+              const catKey = categorize(desc, customRulesSnapshot);
               rawTxs.push({ id: Math.random().toString(36).substr(2, 9), date, desc, amount, catKey });
             }
           });
@@ -154,25 +150,51 @@ export default function App() {
           });
           validTxsInFile = [...validTxsInFile, ...positiveTxs];
 
-          let updatedDB = [...allTransactions];
+          let updatedDB = [...currentDB];
           validTxsInFile.forEach(newTx => {
             if (newTx.amount < 0) {
                const hIdx = updatedDB.findIndex(h => h.desc === newTx.desc && h.amount === Math.abs(newTx.amount));
                if (hIdx !== -1) updatedDB.splice(hIdx, 1);
-               return; 
+               return;
             }
             const isDup = updatedDB.some(u => u.date === newTx.date && u.desc === newTx.desc && u.amount === newTx.amount);
             if (!isDup) updatedDB.push(newTx);
           });
 
-          setAllTransactions(updatedDB);
-          localStorage.setItem('kakeibo_data', JSON.stringify(updatedDB));
-          setView('home'); 
+          resolve({ db: updatedDB, count: validTxsInFile.filter(t => t.amount >= 0).length });
         }
       });
-    };
-    reader.readAsText(file, 'shift-jis');
-    e.target.value = ''; 
+    });
+  };
+
+  const readFileAsText = (file) =>
+    new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsText(file, 'shift-jis');
+    });
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    let db = [...allTransactions];
+    let totalAdded = 0;
+
+    for (const file of files) {
+      const csvText = await readFileAsText(file);
+      const result = await parseOneFile(csvText, db, customRules);
+      db = result.db;
+      totalAdded += result.count;
+    }
+
+    setAllTransactions(db);
+    localStorage.setItem('kakeibo_data', JSON.stringify(db));
+    if (files.length > 1) {
+      alert(`${files.length}件のCSVファイルをまとめてインポートしました！\n合計 ${totalAdded}件の明細を追加しました。`);
+    }
+    setView('home');
+    e.target.value = '';
   };
   
   const updateCategory = (txId, newCatKey) => {
@@ -368,7 +390,7 @@ export default function App() {
           <label className="welcome-upload">
             <UploadCloud size={48} color="var(--primary-color)" style={{marginBottom: '16px'}} />
             <div style={{fontWeight: '700', fontSize:'18px', color:'var(--primary-color)'}}>CSVファイルを選択</div>
-            <input type="file" accept=".csv" onChange={handleFileUpload} />
+            <input type="file" accept=".csv" multiple onChange={handleFileUpload} />
           </label>
         </div>
         
@@ -589,7 +611,7 @@ export default function App() {
       {view !== 'settings' && (
         <label className="fab">
            <Plus size={28} />
-           <input type="file" accept=".csv" onChange={handleFileUpload} />
+           <input type="file" accept=".csv" multiple onChange={handleFileUpload} />
         </label>
       )}
 
