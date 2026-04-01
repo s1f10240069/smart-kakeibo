@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight, Edit3, ShieldAlert, Sparkles, Key, CloudUpload, CloudDownload, Eye, EyeOff, Github } from 'lucide-react';
+import { UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight, Edit3, ShieldAlert, Sparkles, Key, Upload, Download, Eye, EyeOff } from 'lucide-react';
 import './index.css';
 
 const CATEGORY_MAP = {
@@ -521,7 +521,7 @@ export default function App() {
                {/* CLOUD SYNC SECTION */}
                <div className="chart-wrapper" style={{marginBottom:'24px'}}>
                  <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px'}}>
-                    <Github color="var(--text-primary)" /> 
+                    <Sparkles color="var(--text-primary)" /> 
                     <span style={{fontWeight:'700', fontSize:'16px'}}>アカウント クラウド同期</span>
                  </div>
                  <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'20px', lineHeight:'1.5'}}>
@@ -541,10 +541,10 @@ export default function App() {
 
                  <div style={{display:'flex', gap:'10px'}}>
                     <button onClick={uploadToCloud} style={{flex:1, display:'flex', justifyContent:'center', alignItems:'center', gap:'6px', padding:'12px', borderRadius:'10px', border:'none', background:'#10b981', color:'#fff', fontWeight:'700', fontSize:'13px'}}>
-                       <CloudUpload size={16} /> クラウドへ保存
+                       <Upload size={16} /> クラウドへ保存
                     </button>
                     <button onClick={downloadFromCloud} style={{flex:1, display:'flex', justifyContent:'center', alignItems:'center', gap:'6px', padding:'12px', borderRadius:'10px', border:'none', background:'var(--primary-color)', color:'#fff', fontWeight:'700', fontSize:'13px'}}>
-                       <CloudDownload size={16} /> データを読み込む
+                       <Download size={16} /> データを読み込む
                     </button>
                  </div>
                  
