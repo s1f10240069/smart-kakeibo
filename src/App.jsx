@@ -1,27 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { UploadCloud, AlertCircle, BarChart3, ListFilter, Trash2, Smartphone, Calendar, ChevronDown } from 'lucide-react';
+import { UploadCloud, AlertCircle, BarChart3, ListFilter, Trash2, Smartphone, Calendar, ChevronDown, Edit3 } from 'lucide-react';
 import './index.css';
 
 const CATEGORY_MAP = {
   Food: { name: '食費・飲食', color: '#f43f5e', icon: '🍔' },
-  Daily: { name: '日用品・スーパー', color: '#10b981', icon: '🛒' },
+  Daily: { name: '日・スーパー', color: '#10b981', icon: '🛒' },
+  Shopping: { name: 'ショッピング', color: '#34d399', icon: '🛍️' },
   Entertainment: { name: 'エンタメ・趣味', color: '#a855f7', icon: '🎮' },
   Transport: { name: '交通・通信', color: '#3b82f6', icon: '🚃' },
-  Beauty: { name: '美容・被服', color: '#ec4899', icon: '✂️' },
+  Beauty: { name: '美容・被服・医療', color: '#ec4899', icon: '✂️' },
   Travel: { name: '旅行・宿泊', color: '#f59e0b', icon: '🏨' },
+  Fixed: { name: '固定費・税金', color: '#0ea5e9', icon: '📄' },
   Others: { name: 'その他', color: '#94a3b8', icon: '💳' },
 };
 
-const categorize = (desc) => {
+const categorize = (desc, customRules = {}) => {
   const d = desc.toUpperCase();
-  if (d.includes('マクドナルド') || d.includes('FAMILYMART') || d.includes('ﾌｱﾐﾘ-ﾏ-ﾄ') || d.includes('ﾛ-ｿﾝ') || d.includes('ｾﾌﾞﾝ ｲﾚﾌﾞﾝ') || d.includes('ﾏﾂﾔ') || d.includes('ﾔﾖｲｹﾝ') || d.includes('ｾﾝﾀ-ﾋﾞ-ﾌ') || d.includes('ﾀﾝﾔｾﾞﾝｼﾞﾛｳ') || d.includes('ｱﾀﾐﾌﾟﾘﾝ') || d.includes('ｺﾞ-ｺﾞ-ｶﾚ-')) return 'Food';
-  if (d.includes('MAXVALU') || d.includes('ﾏｯｸｽﾊﾞﾘｭ') || d.includes('ﾒｶﾞﾄﾞﾝｷ') || d.includes('CANDO')) return 'Daily';
-  if (d.includes('STEAM') || d.includes('NINTENDO') || d.includes('YOUTUB') || d.includes('HOSHIMACHI') || d.includes('ﾋﾒﾋﾅ') || d.includes('ﾂﾀﾔﾌﾞﾂｸｽ') || d.includes('ｸﾞｯｽﾞ') || d.includes('ﾏﾙｸ')) return 'Entertainment';
-  if (d.includes('HELLO CYCLING') || d.includes('仙台') || d.includes('ﾀｸｼ-') || d.includes('ﾎﾟｳﾞｫ') || d.includes('ﾁｬｰｼﾞｽﾎﾟｯﾄ')) return 'Transport';
-  if (d.includes('ｶﾂﾄｼﾞﾕﾝ') || d.includes('ｱｵﾔﾏﾌ-ﾁﾝ')) return 'Beauty';
-  if (d.includes('HOTEL') || d.includes('ﾌﾞｯｷﾝｸﾞ･ﾄﾞｯﾄｺﾑ')) return 'Travel';
+
+  // 1. Check user custom rules first (Learning AI Feature)
+  // We check if the transaction description contains the rule keyword.
+  for (const [ruleKeyword, ruleCat] of Object.entries(customRules)) {
+    if (d.includes(ruleKeyword.toUpperCase())) return ruleCat;
+  }
+
+  // 2. Comprehensive heuristics based on common Japanese credit card specs
+  if (/(ﾏｸﾄﾞﾅﾙﾄﾞ|FAMILYMART|ﾌｱﾐﾘ-ﾏ-ﾄ|ﾛ-ｿﾝ|ｾﾌﾞﾝ|ﾏﾂﾔ|ﾔﾖｲｹﾝ|ｾﾝﾀ-ﾋﾞ-ﾌ|ﾀﾝﾔ|ｱﾀﾐﾌﾟﾘﾝ|ｺﾞ-ｺﾞ-ｶﾚ-|ｶﾌｪ|ﾚｽﾄﾗﾝ|ｺ-ﾋ-|ｽﾀﾊﾞ|ﾄﾞﾄ-ﾙ|ｲｻﾞｶﾔ|ｳ-ﾊﾞ-|UBER|WOLT|ﾃﾞﾘﾊﾞﾘ-|ｽｼ|焼肉|食堂|KFC|ｻｲｾﾞﾘﾔ|ｶﾞｽﾄ|すき家|吉野家|モスバーガー)/.test(d)) return 'Food';
+  
+  if (/(MAXVALU|ﾏｯｸｽﾊﾞﾘｭ|ﾒｶﾞﾄﾞﾝｷ|ﾄﾞﾝｷﾎ-ﾃ|CANDO|ﾀﾞｲｿ-|DAISO|ｾﾘｱ|ｲｵﾝ|AEON|ｽ-ﾊﾟ-|ﾏﾙｴﾂ|ｲﾄ-ﾖ-ｶﾄﾞ-|ｾｲﾕｳ|SEIYU|ｵｵｾﾞｷ|ﾗｲﾌ|ｵ-ｹ-|ﾏﾂﾓﾄｷﾖｼ|薬|ﾄﾞﾗｯｸﾞ|ｳｴﾙｼｱ|ｽｷﾞﾔｯｷｮｸ|ｺｺｶﾗﾌｧｲﾝ|ｻﾝﾄﾞﾗｯｸﾞ)/.test(d)) return 'Daily';
+  
+  if (/(AMAZON|ｱﾏｿﾞﾝ|YAMADA|ﾋﾞｯｸｶﾒﾗ|ﾖﾄﾞﾊﾞｼ|ﾆﾄﾘ|IKEA|無印|ﾑｼﾞﾙｼ|UNIQLO|ﾕﾆｸﾛ|GU|ｼﾏﾑﾗ|ZOZOTOWN|楽天|ﾗｸﾃﾝ|YAHOO|ﾏﾙｲ|ﾙﾐﾈ|百貨店)/.test(d)) return 'Shopping';
+
+  if (/(STEAM|NINTENDO|YOUTUB|HOSHIMACHI|ﾋﾒﾋﾅ|ﾂﾀﾔ|ｸﾞｯｽﾞ|ﾏﾙｸ|NETFLIX|PRIME|DISNEY|SPOTIFY|APPLE COM|GOOGLE|DMM|FANZA|PIXIV|ｺﾐｯｸ|ｹﾞ-ﾑ|ｶﾗｵｹ|映画|ｼﾈﾏ|TICKET|ﾁｹｯﾄ|ｲﾍﾞﾝﾄ|TOHO|本|書店)/.test(d)) return 'Entertainment';
+
+  if (/(HELLO CYCLING|仙台|ﾀｸｼ-|ﾎﾟｳﾞｫ|POVO|ﾁｬｰｼﾞｽﾎﾟｯﾄ|JR|SUICA|PASMO|ｸﾘｱﾊﾟｽ|携帯|ﾄﾞｺﾓ|DOCOMO|AU|SOFTBANK|UQ|Y!MOBILE|LINEMO|BIGLOBE|NIFTY|通信|ｲﾝﾀ-ﾈｯﾄ|WIFI|ETC|高速|ｶﾞｿﾘﾝ|ENEOS|出光|ﾊﾞｽ|航空|ANA|JAL|PEACH|PARKING|駐輪|駐車)/.test(d)) return 'Transport';
+
+  if (/(ｶﾂﾄｼﾞﾕﾝ|ｱｵﾔﾏﾌ-ﾁﾝ|美容|ｻﾛﾝ|ﾈｲﾙ|ｸﾘﾆｯｸ|病院|歯科|眼科|ﾒﾃﾞｨｶﾙ|ﾍｱ-|ﾏｯｻ-ｼﾞ)/.test(d)) return 'Beauty';
+
+  if (/(HOTEL|ﾌﾞｯｷﾝｸﾞ|BOOKING|AGODA|EXPEDIA|JTB|HIS|旅行|旅館|ﾎﾃﾙ|ﾘｿﾞ-ﾄ|AIRBNB|ﾄﾗﾍﾞﾙ)/.test(d)) return 'Travel';
+
+  if (/(ガス|水道|電気|ﾃﾞﾝｷ|保険|税金|NHK|年金|電力|ｴﾈﾙｷﾞ-|東京瓦斯|TEPCO|家賃|ｱﾊﾟﾏﾝ)/.test(d)) return 'Fixed';
+
   return 'Others';
 };
 
@@ -35,18 +55,27 @@ export default function App() {
   
   const [selectedMonth, setSelectedMonth] = useState('');
   const [availableMonths, setAvailableMonths] = useState([]);
+  
+  // Custom Learning Rules
+  const [customRules, setCustomRules] = useState({});
 
   // Load from local storage on mount
   useEffect(() => {
     const saved = localStorage.getItem('kakeibo_data');
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) {
-          setAllTransactions(parsed);
-        }
+         setAllTransactions(JSON.parse(saved));
       } catch (e) {
         console.error("Failed to parse local kakeibo data", e);
+      }
+    }
+    
+    const savedRules = localStorage.getItem('kakeibo_rules');
+    if (savedRules) {
+      try {
+         setCustomRules(JSON.parse(savedRules));
+      } catch (e) {
+         console.error(e);
       }
     }
   }, []);
@@ -92,7 +121,6 @@ export default function App() {
     const catTotals = {};
 
     filtered.forEach(tx => {
-      // Assuming all remaining txs here are expenses due to cancellation logic
       totalExp += tx.amount;
       catTotals[tx.catKey] = (catTotals[tx.catKey] || 0) + tx.amount;
     });
@@ -127,7 +155,8 @@ export default function App() {
               if (date === "") date = "日付なし";
               const desc = row[2] ? row[2].trim() : "不明な取引";
               const amount = parseFloat(row[4]) || 0;
-              const catKey = categorize(desc);
+              // Categorize with custom rules!
+              const catKey = categorize(desc, customRules);
               rawTxs.push({ id: Math.random().toString(36).substr(2, 9), date, desc, amount, catKey });
             }
           });
@@ -141,11 +170,8 @@ export default function App() {
           negativeTxs.forEach(neg => {
             const matchIndex = positiveTxs.findIndex(pos => pos.desc === neg.desc && pos.amount === Math.abs(neg.amount));
             if (matchIndex !== -1) {
-              // Found a perfect match! Cancel them both out.
               positiveTxs.splice(matchIndex, 1);
             } else {
-              // If we didn't find its positive counterpart in this file,
-              // we keep it to cancel against the history DB.
               validTxsInFile.push(neg);
             }
           });
@@ -156,17 +182,14 @@ export default function App() {
           
           validTxsInFile.forEach(newTx => {
             if (newTx.amount < 0) {
-               // Try to match cancellation against existing history
                const hMatchIdx = updatedDB.findIndex(h => h.desc === newTx.desc && h.amount === Math.abs(newTx.amount));
                if (hMatchIdx !== -1) {
-                 updatedDB.splice(hMatchIdx, 1); // remove from history Let's pretend it never happened
+                 updatedDB.splice(hMatchIdx, 1);
                  return;
                }
-               // If no active history match is found, just ignore it or log it. We drop it so it doesn't skew numbers.
                return; 
             }
 
-            // Simple Deduplication: prevents appending the exact same file's contents twice
             const isDup = updatedDB.some(u => u.date === newTx.date && u.desc === newTx.desc && u.amount === newTx.amount);
             if (!isDup) {
               updatedDB.push(newTx);
@@ -181,6 +204,26 @@ export default function App() {
     reader.readAsText(file, 'shift-jis');
     e.target.value = ''; // reset
   };
+  
+  const updateCategory = (txId, newCatKey) => {
+    const tx = allTransactions.find(t => t.id === txId);
+    if (!tx) return;
+
+    // 1. Save rule to automatically apply to identical descriptions in the future
+    const newRules = { ...customRules, [tx.desc]: newCatKey };
+    setCustomRules(newRules);
+    localStorage.setItem('kakeibo_rules', JSON.stringify(newRules));
+
+    // 2. Retroactively apply this new rule to ALL existing transactions with the same description!
+    const updatedTxs = allTransactions.map(t => {
+      if (t.desc === tx.desc) {
+        return { ...t, catKey: newCatKey };
+      }
+      return t;
+    });
+    setAllTransactions(updatedTxs);
+    localStorage.setItem('kakeibo_data', JSON.stringify(updatedTxs));
+  };
 
   const clearData = () => {
     if (window.confirm("これまでの記録をすべて削除しますか？")) {
@@ -193,7 +236,7 @@ export default function App() {
     <div className="app-container">
       <div className="header">
         <h1>スマート明細</h1>
-        <p>スマホでサクッと家計簿・自動キャンセル対応✨</p>
+        <p>自動判定＆学習機能つき家計簿🤖✨</p>
       </div>
 
       {allTransactions.length === 0 ? (
@@ -206,9 +249,10 @@ export default function App() {
           </label>
 
           <div className="info-box glass-card">
-            <div className="info-title"><AlertCircle size={18} /> 文字化けについて</div>
+            <div className="info-title"><AlertCircle size={18} /> スゴイ自動判定＆学習！</div>
             <div className="info-text">
-              「Shift-JIS」を自動で解読するので、文字化けを気にせずアップロードしてください。<br/>マイナス請求（キャンセル）も自動的に相殺（なかったことに）します！
+              ほとんどのお店を自動で判別しますが、もし間違っていたり「その他」になってしまった場合は、<br/>
+              <b>明細リストでカテゴリーを直接変更</b>してください。アプリがそのルールを学習し、次回から自動で分類します！
             </div>
           </div>
         </div>
@@ -240,7 +284,7 @@ export default function App() {
             
             <div className="summary-label">支出合計</div>
             <div className="summary-balance">{summary && formatCurrency(summary.totalExp)}</div>
-            <div className="summary-period" style={{color: '#10b981'}}>キャンセル分は自動で差し引かれています</div>
+            <div className="summary-period" style={{color: '#10b981'}}>AI自動学習・キャンセル自動相殺が有効です</div>
           </div>
 
           <div className="tabs">
@@ -308,14 +352,29 @@ export default function App() {
 
           {activeTab === 'list' && (
             <div className="transaction-list animate-fade-in">
+              <div style={{fontSize:'12px', color:'#94a3b8', textAlign:'center', marginBottom:'10px'}}>
+                💡 カテゴリ名（右側）をタップすると自由に分類を変更＆学習させられます
+              </div>
               {transactions.length > 0 ? transactions.map(tx => (
                 <div key={tx.id} className="tx-item">
                   <div className="tx-icon">
                     {CATEGORY_MAP[tx.catKey].icon}
                   </div>
                   <div className="tx-details">
-                     <div className="tx-name">{tx.desc}</div>
-                     <div className="tx-meta">{tx.date} • {CATEGORY_MAP[tx.catKey].name}</div>
+                     <div className="tx-name" title={tx.desc}>{tx.desc}</div>
+                     <div className="tx-meta" style={{alignItems: 'center'}}>
+                       <div>{tx.date}</div>
+                       <div style={{display:'flex', alignItems:'center', background:'rgba(255,255,255,0.08)', padding:'2px 8px', borderRadius:'10px', marginLeft:'6px'}}>
+                         <select 
+                           value={tx.catKey} 
+                           onChange={e => updateCategory(tx.id, e.target.value)}
+                           style={{ background: 'transparent', color: '#818cf8', border: 'none', fontSize: '11px', outline: 'none', cursor: 'pointer', padding: 0, fontWeight: '600' }}
+                         >
+                           {Object.keys(CATEGORY_MAP).map(k => <option key={k} value={k} style={{color: '#000'}}>{CATEGORY_MAP[k].name}</option>)}
+                         </select>
+                         <Edit3 size={10} style={{marginLeft:'4px', color:'#818cf8'}} />
+                       </div>
+                     </div>
                   </div>
                   <div className="tx-amount expense">
                      {formatCurrency(tx.amount)}
