@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight, Edit3, ShieldAlert, Sparkles, Key } from 'lucide-react';
+import { UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight, Edit3, ShieldAlert, Sparkles, Key, Download, Upload, Eye, EyeOff } from 'lucide-react';
 import './index.css';
 
 const CATEGORY_MAP = {
@@ -23,19 +23,12 @@ const categorize = (desc, customRules = {}) => {
   }
   
   if (/(ﾃﾝ|店|ｼﾖｸﾄﾞｳ|食堂|ｶﾌｴ|ｶﾌｪ|ｲｻﾞｶﾔ|居酒屋|ﾚｽﾄﾗﾝ|ﾀﾞｲﾆﾝｸﾞ|ﾍﾞ-ｶﾘ-|ﾊﾟﾝﾔ|ﾏｸﾄﾞﾅﾙﾄﾞ|ﾏﾂｸ|FAMILYMART|ﾌｱﾐﾘ-ﾏ-ﾄ|ﾛ-ｿﾝ|LAWSON|ｾﾌﾞﾝ|ﾏﾂﾔ|ﾔﾖｲｹﾝ|ｽｷﾔ|ﾖｼﾉﾔ|ｳﾄﾞﾝ|ｿﾊﾞ|ﾗ-ﾒﾝ|ｽｼ|ｽﾃ-ｷ|ﾔｷﾆｸ|焼肉|ﾊﾞ-|BAR|ﾀｶﾉ|ﾌﾙ-ﾂ|ｽｲ-ﾂ|ｹ-ｷ|ｾﾝﾀ-ﾋﾞ-ﾌ|ﾀﾝﾔ|ｱﾀﾐﾌﾟﾘﾝ|ｺﾞ-ｺﾞ-ｶﾚ-|ｺ-ﾋ-|ｽﾀﾊﾞ|ﾄﾞﾄ-ﾙ|ﾀﾘ-ｽﾞ|ｳ-ﾊﾞ-|UBER|WOLT|ﾃﾞﾘﾊﾞﾘ-|KFC|ｻｲｾﾞﾘﾔ|ｶﾞｽﾄ|すき家|吉野家|モスバーガー)/.test(d)) return 'Food';
-  
   if (/(ｽ-ﾊﾟ-|ｺﾝﾋﾞﾆ|ﾏ-ﾄ|MAXVALU|ﾏｯｸｽﾊﾞﾘｭ|ﾒｶﾞﾄﾞﾝｷ|ﾄﾞﾝｷﾎ-ﾃ|ﾄﾞﾝｷ|ﾄﾞﾝ･ｷﾎ-ﾃ|ｲｵﾝ|AEON|ｲﾄ-ﾖ-ｶﾄﾞ-|ｾｲﾕｳ|SEIYU|ﾏﾙｴﾂ|ｻﾐｯﾄ|ｲﾅｹﾞﾔ|ｵｵｾﾞｷ|ｵ-ｹ-|ﾋﾟ-ｺｯｸ|ﾏﾂﾓﾄｷﾖｼ|ﾏﾂｷﾖ|薬|ﾄﾞﾗｯｸﾞ|ｳｴﾙｼｱ|ｽｷﾞ|ｻﾝﾄﾞﾗｯｸﾞ|ｺｺｶﾗ|ｸﾘｴｲﾄ|DAISO|ﾀﾞｲｿ-|ｾﾘｱ|CANDO|ｷｬﾝﾄﾞｩ)/.test(d)) return 'Daily';
-
   if (/(AMAZON|ｱﾏｿﾞﾝ|YAMADA|ﾔﾏﾀﾞ|ﾋﾞｯｸｶﾒﾗ|ﾖﾄﾞﾊﾞｼ|ﾆﾄﾘ|IKEA|無印|ﾑｼﾞﾙｼ|UNIQLO|ﾕﾆｸﾛ|GU|ｼﾏﾑﾗ|ZOZOTOWN|ZOZO|楽天|ﾗｸﾃﾝ|YAHOO|ﾏﾙｲ|ﾙﾐﾈ|ﾊﾟﾙｺ|ｲｾﾀﾝ|ﾀｶｼﾏﾔ|ﾐﾂｺｼ|ﾀﾞｲﾏﾙ|ｿｺﾞｳ|ｼｮｯﾌﾟ|SHOP|STORE|ｽﾄｱ|MALL|ﾓ-ﾙ|PAYPAY|ﾍﾟｲﾍﾟｲ|SQ\*|ST\*|SP \*|BASE)/.test(d)) return 'Shopping';
-
   if (/(STEAM|NINTENDO|任天堂|PLAYSTATION|SONY|YOUTUB|NETFLIX|PRIME|DISNEY|HULU|U-NEXT|SPOTIFY|APPLE|GOOGLE|DMM|FANZA|PIXIV|DLｻｲﾄ|ｺﾐｯｸ|ﾏﾝｶﾞ|ｹﾞ-ﾑ|ｶﾗｵｹ|映画|ｼﾈﾏ|TOHO|ｲｵﾝｼﾈﾏ|TICKET|ﾁｹｯﾄ|ｲﾍﾞﾝﾄ|ﾗｲﾌﾞ|ﾌｧﾝｸﾗﾌﾞ|FC|本|書店|ﾌﾞｯｸ|BOOK|TSUTAYA|ﾂﾀﾔ|GEO|ｹﾞｵ|ｸﾞｯｽﾞ|ﾄｲｻﾞﾗｽ|ﾋﾒﾋﾅ|ﾏﾙｸ|HOSHIMACHI)/.test(d)) return 'Entertainment';
-
   if (/(SUICA|PASMO|ICOCA|NANACO|WAON|EDY|JR|地下鉄|ﾒﾄﾛ|METRO|交通|ﾀｸｼ-|GO|UBER|DI DI|ﾊﾞｽ|航空|ANA|JAL|PEACH|JETSTAR|SKYMARK|PARKING|駐輪|駐車|ﾀｲﾑｽﾞ|TIMES|HELLO CYCLING|LUUP|ﾄﾞｺﾓ|DOCOMO|AU|SOFTBANK|UQ|Y!MOBILE|LINEMO|POVO|BIGLOBE|NIFTY|通信|ｲﾝﾀ-ﾈｯﾄ|WIFI|ETC|高速|NEXCO|ｶﾞｿﾘﾝ|ENEOS|出光|ｼｪﾙ|仙台|ﾁｬｰｼﾞｽﾎﾟｯﾄ)/.test(d)) return 'Transport';
-
   if (/(美容|ｻﾛﾝ|ﾈｲﾙ|ｴｽﾃ|ﾏﾂｴｸ|ﾍｱ-|ｶｯﾄ|ｸﾘﾆｯｸ|病院|歯科|眼科|ﾒﾃﾞｨｶﾙ|薬局|ﾏｯｻ-ｼﾞ|整体|鍼灸|ｱｵﾔﾏﾌ-ﾁﾝ)/.test(d)) return 'Beauty';
-
   if (/(HOTEL|ﾌﾞｯｷﾝｸﾞ|BOOKING|AGODA|EXPEDIA|JTB|HIS|旅行|旅館|ﾎﾃﾙ|ﾘｿﾞ-ﾄ|AIRBNB|ﾄﾗﾍﾞﾙ|TRIP|TOUR|ﾂｱ-)/.test(d)) return 'Travel';
-
   if (/(ガス|水道|電気|ﾃﾞﾝｷ|保険|税金|NHK|年金|電力|ｴﾈﾙｷﾞ-|東京瓦斯|TEPCO|家賃|ｱﾊﾟﾏﾝ)/.test(d)) return 'Fixed';
 
   return 'Others';
@@ -48,11 +41,13 @@ export default function App() {
   const [customRules, setCustomRules] = useState({});
   const [geminiKey, setGeminiKey] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [showKey, setShowKey] = useState(false);
 
-  const [view, setView] = useState('home'); // 'home', 'list', 'settings'
+  const [view, setView] = useState('home'); 
   const [targetMonth, setTargetMonth] = useState('');
   
-  // Robust Loading from LocalStorage on mount
+  const fileInputRef = useRef(null);
+  
   useEffect(() => {
     try {
       const savedData = localStorage.getItem('kakeibo_data');
@@ -196,14 +191,12 @@ export default function App() {
     localStorage.setItem('kakeibo_aikey', val);
   };
 
-  // AI MAGIC CATEGORIZATION
   const runAiCategorization = async () => {
     if (!geminiKey) {
-       alert("設定タブからGeminiのAPIキーを登録してください！");
+       alert("設定タブからGeminiのAPIキーを入力してください！");
        return;
     }
     
-    // Find unique "Others" descriptions
     const others = allTransactions.filter(t => t.catKey === 'Others');
     if (others.length === 0) {
        alert("現在「その他」に分類されている明細はありません ✨");
@@ -240,12 +233,9 @@ ${JSON.stringify(uniqueDescs)}
       if (!response.ok) throw new Error(data.error?.message || "AI Error");
 
       const textFormat = data.candidates[0].content.parts[0].text;
-      
-      // Clean up markdown block if present
       const jsonStr = textFormat.replace(/```json/g, '').replace(/```/g, '').trim();
       const aiResults = JSON.parse(jsonStr);
 
-      // Merge AI rules into our customRules
       const newRules = { ...customRules };
       for (const [desc, cat] of Object.entries(aiResults)) {
          if (CATEGORY_MAP[cat] && cat !== 'Others') {
@@ -256,7 +246,6 @@ ${JSON.stringify(uniqueDescs)}
       setCustomRules(newRules);
       localStorage.setItem('kakeibo_rules', JSON.stringify(newRules));
 
-      // Apply to history
       const updatedTxs = allTransactions.map(t => {
          if (aiResults[t.desc] && aiResults[t.desc] !== 'Others' && CATEGORY_MAP[aiResults[t.desc]]) {
              return { ...t, catKey: aiResults[t.desc] };
@@ -277,10 +266,61 @@ ${JSON.stringify(uniqueDescs)}
     }
   };
 
+  // ----- SYNC FUNCTIONS -----
+  const exportData = () => {
+    const exportObj = {
+      transactions: allTransactions,
+      rules: customRules,
+      apiKey: geminiKey,
+      exportDate: new Date().toISOString()
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+    const dt = new Date();
+    const fileName = `スマート明細_バックアップ_${dt.getFullYear()}${dt.getMonth()+1}${dt.getDate()}.json`;
+    
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", fileName);
+    dlAnchorElem.click();
+  };
+
+  const syncFileInputRef = useRef(null);
+  const importData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+         const obj = JSON.parse(event.target.result);
+         if (obj.transactions) {
+           setAllTransactions(obj.transactions);
+           localStorage.setItem('kakeibo_data', JSON.stringify(obj.transactions));
+         }
+         if (obj.rules) {
+           setCustomRules(obj.rules);
+           localStorage.setItem('kakeibo_rules', JSON.stringify(obj.rules));
+         }
+         if (obj.apiKey) {
+           setGeminiKey(obj.apiKey);
+           localStorage.setItem('kakeibo_aikey', obj.apiKey);
+         }
+         alert("同期データを正常に読み込みました！🎉");
+         setView('home');
+      } catch(err) {
+         alert("ファイルの読み込みに失敗しました。正しいバックアップファイルを選択してください。");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const clearData = () => {
     if (window.confirm("これまでの記録をすべて完全に削除しますか？\n（この操作は取り消せません）")) {
       setAllTransactions([]);
+      setCustomRules({});
       localStorage.removeItem('kakeibo_data');
+      localStorage.removeItem('kakeibo_rules');
       setView('home');
     }
   };
@@ -302,9 +342,16 @@ ${JSON.stringify(uniqueDescs)}
             <div style={{fontWeight: '700', fontSize:'18px', color:'var(--primary-color)'}}>CSVファイルを選択</div>
             <input type="file" accept=".csv" onChange={handleFileUpload} />
           </label>
+
+          <div style={{marginTop: '30px', textAlign: 'center'}}>
+             <div style={{fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '10px'}}>PCなどから引き継ぐ場合はこちら</div>
+             <label style={{display: 'inline-flex', alignItems:'center', gap: '8px', color: 'var(--primary-color)', cursor: 'pointer', padding: '10px 20px', borderRadius: '20px', background: 'rgba(99, 102, 241, 0.1)', fontWeight: '700'}}>
+                 <Upload size={18} /> バックアップデータを読み込む
+                 <input type="file" accept=".json" style={{display:'none'}} onChange={importData} />
+             </label>
+          </div>
         </div>
         
-        {/* Bottom Nav */}
         <div className="bottom-nav">
            <div className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={() => setView('home')}>
               <Home size={22} /><span className="nav-label">ホーム</span>
@@ -317,12 +364,10 @@ ${JSON.stringify(uniqueDescs)}
     );
   }
 
-  // Count "Others" for AI Badge
   const othersCount = filteredTx.filter(t => t.catKey === 'Others').length;
 
   return (
     <div id="root">
-      {/* Header */}
       <div className="app-header">
          <div className="app-title">スマート明細</div>
          <div style={{fontWeight: '600', color: 'var(--text-secondary)', fontSize:'14px'}}>{filteredTx.length}件</div>
@@ -342,7 +387,6 @@ ${JSON.stringify(uniqueDescs)}
            </div>
          )}
 
-         {/* --- HOME VIEW --- */}
          {view === 'home' && (
            <div className="summary-container animate-fade">
               <div className="total-card">
@@ -379,14 +423,13 @@ ${JSON.stringify(uniqueDescs)}
                     ))}
                   </div>
 
-                  {/* AI Categorization Call to Action */}
                   <div style={{marginTop:'24px', padding:'16px', background:'rgba(168, 85, 247, 0.05)', borderRadius:'16px', border:'1px solid rgba(168, 85, 247, 0.2)'}}>
                      <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px'}}>
                         <Sparkles color="#a855f7" size={20}/>
-                        <span style={{fontWeight:'700', color:'#a855f7', fontSize:'15px'}}>AIに「その他」を仕分けさせる</span>
+                        <span style={{fontWeight:'700', color:'#a855f7', fontSize:'15px'}}>AIに「その他」を整理させる</span>
                      </div>
                      <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'16px'}}>
-                        現在、未分類（その他）のお買い物が <b>{othersCount}</b> 件あります。Googleの最新AI「Gemini」に判別させる新機能です！
+                        現在未分類のお買い物が <b>{othersCount}</b> 件あります。Google GeminiにAI判別させます。
                      </p>
                      <button 
                        onClick={runAiCategorization} 
@@ -397,7 +440,7 @@ ${JSON.stringify(uniqueDescs)}
                          color: (!geminiKey || othersCount === 0) ? '#9ca3af' : '#fff',
                          fontWeight:'700', cursor: (!geminiKey || othersCount === 0) ? 'not-allowed' : 'pointer'
                        }}>
-                        {isAiLoading ? 'AIが考え中...' : (!geminiKey ? 'まずは「設定」でAPIキーを入力' : `${othersCount}件の未分類をAIで整理する`)}
+                        {isAiLoading ? 'AIが考え中...' : (!geminiKey ? 'まずはアプリ設定でAPIキーを入力' : `${othersCount}件の未分類をAIで整理する`)}
                      </button>
                   </div>
 
@@ -408,7 +451,6 @@ ${JSON.stringify(uniqueDescs)}
            </div>
          )}
 
-         {/* --- LIST VIEW --- */}
          {view === 'list' && (
            <div className="animate-fade">
               {groupedTxs.length > 0 ? groupedTxs.map(group => (
@@ -442,7 +484,6 @@ ${JSON.stringify(uniqueDescs)}
            </div>
          )}
 
-         {/* --- SETTINGS VIEW --- */}
          {view === 'settings' && (
             <div className="summary-container animate-fade">
                <h2 style={{marginBottom:'24px', fontSize:'24px', fontWeight:'800'}}>設定</h2>
@@ -450,25 +491,44 @@ ${JSON.stringify(uniqueDescs)}
                <div className="chart-wrapper" style={{marginBottom:'24px'}}>
                  <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
                     <Sparkles color="#a855f7" /> 
-                    <span style={{fontWeight:'700', fontSize:'16px'}}>Gemini AI 連携 (無料)</span>
+                    <span style={{fontWeight:'700', fontSize:'16px'}}>Gemini AI 連携 (APIキー)</span>
                  </div>
                  <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'16px', lineHeight:'1.5'}}>
-                   Google AI Studioから無料で取得できる「Gemini API キー」を入力すると、面倒な仕分けをすべて最新のAIに丸投げできます！<br/>
-                   ※キーはお使いのスマホ内にのみ安全に保存されます。
+                   ※入力エリアをタップして、キーをペースト（貼り付け）してください。
                  </p>
-                 <div style={{display:'flex', alignItems:'center', background:'var(--bg-color)', border:'1px solid var(--border-color)', borderRadius:'10px', padding:'12px'}}>
-                    <Key size={18} color="var(--text-secondary)" style={{marginRight:'12px'}}/>
+                 <div style={{display:'flex', alignItems:'center', background:'var(--bg-color)', border:'1px solid var(--border-color)', borderRadius:'10px', padding:'12px', marginBottom:'10px'}}>
+                    <Key size={18} color="var(--primary-color)" style={{marginRight:'12px'}}/>
                     <input 
-                      type="password" 
-                      placeholder="AIZ..."
+                      type={showKey ? "text" : "password"} 
+                      placeholder="AIzaSy..."
                       value={geminiKey}
                       onChange={e => handleSaveKey(e.target.value)}
-                      style={{flex:1, border:'none', background:'transparent', outline:'none', fontSize:'14px', color:'var(--text-primary)'}}
+                      style={{flex:1, border:'none', background:'transparent', outline:'none', fontSize:'16px', color:'var(--text-primary)', width: '100%'}}
                     />
+                    <div onClick={() => setShowKey(!showKey)} style={{padding: '0 5px', color:'var(--text-secondary)', cursor:'pointer'}}>
+                       {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </div>
                  </div>
-                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{display:'block', marginTop:'12px', fontSize:'12px', color:'var(--primary-color)', textDecoration:'none', fontWeight:'600'}}>
-                    👉 無料でAPIキーを取得する手順はこちら
-                 </a>
+               </div>
+               
+               {/* SYNC SECTION */}
+               <div className="chart-wrapper" style={{marginBottom:'24px'}}>
+                 <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px'}}>
+                    <UploadCloud color="var(--primary-color)" /> 
+                    <span style={{fontWeight:'700', fontSize:'16px'}}>PC・別端末との同期</span>
+                 </div>
+                 <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'20px'}}>
+                   このアプリは一切のデータを外部に送信しない安全設計のため、PCやiPadと同期するには一度「書き出し(バックアップ)」を行い、そのファイルをPCに送って読み込ませます。（設定したAPIキーや学習ルールもそのまま引き継がれます）
+                 </p>
+                 <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                    <button onClick={exportData} style={{display:'flex', justifyContent:'center', alignItems:'center', gap:'8px', padding:'14px', borderRadius:'10px', border:'none', background:'var(--primary-gradient)', color:'#fff', fontWeight:'700', fontSize:'15px'}}>
+                       <Download size={18} /> スマホからデータを書き出す
+                    </button>
+                    <label style={{display:'flex', justifyContent:'center', alignItems:'center', gap:'8px', padding:'14px', borderRadius:'10px', border:'2px dashed var(--primary-color)', background:'rgba(99,102,241,0.05)', color:'var(--primary-color)', fontWeight:'700', fontSize:'15px', cursor:'pointer'}}>
+                       <Upload size={18} /> PCのデータを読み込む
+                       <input type="file" accept=".json" style={{display:'none'}} onChange={importData} />
+                    </label>
+                 </div>
                </div>
 
                <div className="chart-wrapper">
@@ -477,7 +537,7 @@ ${JSON.stringify(uniqueDescs)}
                     <span style={{fontWeight:'700', fontSize:'16px'}}>データのリセット</span>
                  </div>
                  <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'20px'}}>
-                   アプリ内に保存されているすべての明細データと、学習したルールを完全に消去します。
+                   保存されているすべての明細・学習ルール・APIキーを完全に消去します。
                  </p>
                  <button className="settings-btn" onClick={clearData}>全データを削除する</button>
                </div>
@@ -492,7 +552,6 @@ ${JSON.stringify(uniqueDescs)}
         </label>
       )}
 
-      {/* Bottom Nav */}
       <div className="bottom-nav">
          <div className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={() => setView('home')}>
             <Home size={22} /><span className="nav-label">ホーム</span>
