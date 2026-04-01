@@ -37,19 +37,17 @@ body {
   background-color: var(--bg-color);
   color: var(--text-primary);
   min-height: 100vh;
-  overscroll-behavior-y: none;
 }
 
 #root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh; /* modern mobile viewport fix */
+  min-height: 100vh;
+  min-height: 100dvh;
   max-width: 500px;
   margin: 0 auto;
   background-color: var(--bg-color);
   position: relative;
-  overflow: hidden;
 }
 
 /* App Header */
@@ -115,8 +113,7 @@ body {
 /* Content Area */
 .content-area {
   flex: 1;
-  overflow-y: auto;
-  padding-bottom: calc(80px + var(--safe-area-bottom));
+  padding-bottom: calc(85px + var(--safe-area-bottom));
 }
 
 /* Summary Cards */
@@ -286,9 +283,9 @@ body {
 
 /* File Upload Button (Floating) */
 .fab {
-  position: absolute;
+  position: fixed;
   bottom: calc(85px + var(--safe-area-bottom));
-  right: 20px;
+  right: calc(max(20px, 50vw - 230px));
   width: 56px;
   height: 56px;
   border-radius: 28px;
@@ -336,10 +333,12 @@ body {
 
 /* Bottom Nav */
 .bottom-nav {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
+  max-width: 500px;
+  margin: 0 auto;
   height: calc(65px + var(--safe-area-bottom));
   background: var(--surface-color);
   border-top: 1px solid var(--border-color);
