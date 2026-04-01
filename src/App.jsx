@@ -309,15 +309,19 @@ export default function App() {
       setSyncStatus('📡 読み込み中...');
       const existingGist = await getSyncGist(githubToken);
       if (!existingGist) {
-         setSyncStatus('❌ クラウドに同期データが見つかりません');
+         setSyncStatus('❌ クラウドに同期データが見つかりません。先に「クラウドへ保存」を実行してください。');
          return;
       }
       
-      const rawUrl = existingGist.files['smart-kakeibo.json'].raw_url;
-      const res = await fetch(rawUrl, {
+      // Fetch the full gist object to get file content (avoids CORS issue with raw_url).
+      const res = await fetch(`https://api.github.com/gists/${existingGist.id}`, {
          headers: makeGithubHeaders(githubToken)
       });
-      const obj = await res.json();
+      if (!res.ok) throw new Error(`ダウンロード失敗 (${res.status})`);
+      const gistDetail = await res.json();
+      const fileContent = gistDetail.files['smart-kakeibo.json']?.content;
+      if (!fileContent) throw new Error('ファイルの内容が見つかりませんでした。');
+      const obj = JSON.parse(fileContent);
       
       if (obj.transactions) {
          setAllTransactions(obj.transactions);
@@ -541,12 +545,15 @@ export default function App() {
                  
                  <div style={{display:'flex', alignItems:'center', background:'var(--bg-color)', border:'1px solid var(--border-color)', borderRadius:'10px', padding:'12px', marginBottom:'16px'}}>
                     <input 
-                      type="password" 
+                      type={showGhToken ? 'text' : 'password'} 
                       placeholder="ghp_xxxx..."
                       value={githubToken}
                       onChange={e => setGithubToken(e.target.value)}
                       style={{flex:1, border:'none', background:'transparent', outline:'none', fontSize:'14px', color:'var(--text-primary)', width: '100%'}}
                     />
+                    <div onClick={() => setShowGhToken(!showGhToken)} style={{padding: '0 5px', color:'var(--text-secondary)', cursor:'pointer'}}>
+                       {showGhToken ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </div>
                  </div>
 
                  <div style={{display:'flex', gap:'10px'}}>
