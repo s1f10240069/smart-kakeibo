@@ -39,6 +39,7 @@ export default function App() {
   const [customRules, setCustomRules] = useState({});
   const [geminiKey, setGeminiKey] = useState('');
   const [githubToken, setGithubToken] = useState('');
+  const [showGhToken, setShowGhToken] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -239,11 +240,20 @@ export default function App() {
   };
 
   // ----- GITHUB CLOUD SYNC FUNCTIONS -----
+  const makeGithubHeaders = (token) => ({
+    // Support both Classic token (ghp_) and Fine-grained token (github_pat_)
+    Authorization: `Bearer ${token.trim()}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'Content-Type': 'application/json',
+  });
+
   const getSyncGist = async (token) => {
     const res = await fetch('https://api.github.com/gists', {
-      headers: { Authorization: `token ${token}` }
+      headers: makeGithubHeaders(token)
     });
-    if (!res.ok) throw new Error('GitHubトークンが無効か、権限がありません。');
+    if (res.status === 401) throw new Error('トークンが無効です。有効期限が切れていないか確認してください。');
+    if (!res.ok) throw new Error(`GitHub APIエラー (${res.status})。gist権限があるか確認してください。`);
     const gists = await res.json();
     return gists.find(g => g.description === 'smart-kakeibo-cloud-sync');
   };
@@ -278,15 +288,15 @@ export default function App() {
 
       const res = await fetch(url, {
         method,
-        headers: { 
-          Authorization: `token ${githubToken}`,
-          Accept: 'application/vnd.github.v3+json'
-        },
+        headers: makeGithubHeaders(githubToken),
         body: JSON.stringify(gistData)
       });
       
-      if (!res.ok) throw new Error("APIアクセスに失敗しました。");
-      localStorage.setItem('kakeibo_github_token', githubToken);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.message || `アップロード失敗 (${res.status})`);
+      }
+      localStorage.setItem('kakeibo_github_token', githubToken.trim());
       setSyncStatus('✅ 最新のデータを自分のGitHubクラウドに暗号保存しました');
     } catch(err) {
       setSyncStatus(`❌ エラー: ${err.message}`);
@@ -305,7 +315,7 @@ export default function App() {
       
       const rawUrl = existingGist.files['smart-kakeibo.json'].raw_url;
       const res = await fetch(rawUrl, {
-         headers: { Authorization: `token ${githubToken}` }
+         headers: makeGithubHeaders(githubToken)
       });
       const obj = await res.json();
       
@@ -322,7 +332,7 @@ export default function App() {
          localStorage.setItem('kakeibo_aikey', obj.geminiKey);
       }
       
-      localStorage.setItem('kakeibo_github_token', githubToken);
+      localStorage.setItem('kakeibo_github_token', githubToken.trim());
       setSyncStatus('✅ データをスマホに復元・同期しました！');
       setView('home');
     } catch(err) {
