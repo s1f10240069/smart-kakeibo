@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Papa from 'papaparse';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight, Edit3, ShieldAlert } from 'lucide-react';
+import { UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight, Edit3, ShieldAlert, Sparkles, Key } from 'lucide-react';
 import './index.css';
 
 const CATEGORY_MAP = {
@@ -21,14 +21,23 @@ const categorize = (desc, customRules = {}) => {
   for (const [ruleKeyword, ruleCat] of Object.entries(customRules)) {
     if (d.includes(ruleKeyword.toUpperCase())) return ruleCat;
   }
-  if (/(ﾏｸﾄﾞﾅﾙﾄﾞ|FAMILYMART|ﾌｱﾐﾘ-ﾏ-ﾄ|ﾛ-ｿﾝ|ｾﾌﾞﾝ|ﾏﾂﾔ|ﾔﾖｲｹﾝ|ｾﾝﾀ-ﾋﾞ-ﾌ|ﾀﾝﾔ|ｱﾀﾐﾌﾟﾘﾝ|ｺﾞ-ｺﾞ-ｶﾚ-|ｶﾌｪ|ﾚｽﾄﾗﾝ|ｺ-ﾋ-|ｽﾀﾊﾞ|ﾄﾞﾄ-ﾙ|ｲｻﾞｶﾔ|ｳ-ﾊﾞ-|UBER|WOLT|ﾃﾞﾘﾊﾞﾘ-|ｽｼ|焼肉|食堂|KFC|ｻｲｾﾞﾘﾔ|ｶﾞｽﾄ|すき家|吉野家|モスバーガー)/.test(d)) return 'Food';
-  if (/(MAXVALU|ﾏｯｸｽﾊﾞﾘｭ|ﾒｶﾞﾄﾞﾝｷ|ﾄﾞﾝｷﾎ-ﾃ|CANDO|ﾀﾞｲｿ-|DAISO|ｾﾘｱ|ｲｵﾝ|AEON|ｽ-ﾊﾟ-|ﾏﾙｴﾂ|ｲﾄ-ﾖ-ｶﾄﾞ-|ｾｲﾕｳ|SEIYU|ｵｵｾﾞｷ|ﾗｲﾌ|ｵ-ｹ-|ﾏﾂﾓﾄｷﾖｼ|薬|ﾄﾞﾗｯｸﾞ|ｳｴﾙｼｱ|ｽｷﾞﾔｯｷｮｸ|ｺｺｶﾗﾌｧｲﾝ|ｻﾝﾄﾞﾗｯｸﾞ)/.test(d)) return 'Daily';
-  if (/(AMAZON|ｱﾏｿﾞﾝ|YAMADA|ﾋﾞｯｸｶﾒﾗ|ﾖﾄﾞﾊﾞｼ|ﾆﾄﾘ|IKEA|無印|ﾑｼﾞﾙｼ|UNIQLO|ﾕﾆｸﾛ|GU|ｼﾏﾑﾗ|ZOZOTOWN|楽天|ﾗｸﾃﾝ|YAHOO|ﾏﾙｲ|ﾙﾐﾈ|百貨店)/.test(d)) return 'Shopping';
-  if (/(STEAM|NINTENDO|YOUTUB|HOSHIMACHI|ﾋﾒﾋﾅ|ﾂﾀﾔ|ｸﾞｯｽﾞ|ﾏﾙｸ|NETFLIX|PRIME|DISNEY|SPOTIFY|APPLE|GOOGLE|DMM|FANZA|PIXIV|ｺﾐｯｸ|ｹﾞ-ﾑ|ｶﾗｵｹ|映画|ｼﾈﾏ|TICKET|ﾁｹｯﾄ|ｲﾍﾞﾝﾄ|TOHO|本|書店)/.test(d)) return 'Entertainment';
-  if (/(HELLO CYCLING|仙台|ﾀｸｼ-|ﾎﾟｳﾞｫ|POVO|ﾁｬｰｼﾞｽﾎﾟｯﾄ|JR|SUICA|PASMO|ｸﾘｱﾊﾟｽ|携帯|ﾄﾞｺﾓ|DOCOMO|AU|SOFTBANK|UQ|Y!MOBILE|LINEMO|BIGLOBE|NIFTY|通信|ｲﾝﾀ-ﾈｯﾄ|WIFI|ETC|高速|ｶﾞｿﾘﾝ|ENEOS|出光|ﾊﾞｽ|航空|ANA|JAL|PEACH|PARKING|駐輪|駐車)/.test(d)) return 'Transport';
-  if (/(ｶﾂﾄｼﾞﾕﾝ|ｱｵﾔﾏﾌ-ﾁﾝ|美容|ｻﾛﾝ|ﾈｲﾙ|ｸﾘﾆｯｸ|病院|歯科|眼科|ﾒﾃﾞｨｶﾙ|ﾍｱ-|ﾏｯｻ-ｼﾞ)/.test(d)) return 'Beauty';
-  if (/(HOTEL|ﾌﾞｯｷﾝｸﾞ|BOOKING|AGODA|EXPEDIA|JTB|HIS|旅行|旅館|ﾎﾃﾙ|ﾘｿﾞ-ﾄ|AIRBNB|ﾄﾗﾍﾞﾙ)/.test(d)) return 'Travel';
+  
+  if (/(ﾃﾝ|店|ｼﾖｸﾄﾞｳ|食堂|ｶﾌｴ|ｶﾌｪ|ｲｻﾞｶﾔ|居酒屋|ﾚｽﾄﾗﾝ|ﾀﾞｲﾆﾝｸﾞ|ﾍﾞ-ｶﾘ-|ﾊﾟﾝﾔ|ﾏｸﾄﾞﾅﾙﾄﾞ|ﾏﾂｸ|FAMILYMART|ﾌｱﾐﾘ-ﾏ-ﾄ|ﾛ-ｿﾝ|LAWSON|ｾﾌﾞﾝ|ﾏﾂﾔ|ﾔﾖｲｹﾝ|ｽｷﾔ|ﾖｼﾉﾔ|ｳﾄﾞﾝ|ｿﾊﾞ|ﾗ-ﾒﾝ|ｽｼ|ｽﾃ-ｷ|ﾔｷﾆｸ|焼肉|ﾊﾞ-|BAR|ﾀｶﾉ|ﾌﾙ-ﾂ|ｽｲ-ﾂ|ｹ-ｷ|ｾﾝﾀ-ﾋﾞ-ﾌ|ﾀﾝﾔ|ｱﾀﾐﾌﾟﾘﾝ|ｺﾞ-ｺﾞ-ｶﾚ-|ｺ-ﾋ-|ｽﾀﾊﾞ|ﾄﾞﾄ-ﾙ|ﾀﾘ-ｽﾞ|ｳ-ﾊﾞ-|UBER|WOLT|ﾃﾞﾘﾊﾞﾘ-|KFC|ｻｲｾﾞﾘﾔ|ｶﾞｽﾄ|すき家|吉野家|モスバーガー)/.test(d)) return 'Food';
+  
+  if (/(ｽ-ﾊﾟ-|ｺﾝﾋﾞﾆ|ﾏ-ﾄ|MAXVALU|ﾏｯｸｽﾊﾞﾘｭ|ﾒｶﾞﾄﾞﾝｷ|ﾄﾞﾝｷﾎ-ﾃ|ﾄﾞﾝｷ|ﾄﾞﾝ･ｷﾎ-ﾃ|ｲｵﾝ|AEON|ｲﾄ-ﾖ-ｶﾄﾞ-|ｾｲﾕｳ|SEIYU|ﾏﾙｴﾂ|ｻﾐｯﾄ|ｲﾅｹﾞﾔ|ｵｵｾﾞｷ|ｵ-ｹ-|ﾋﾟ-ｺｯｸ|ﾏﾂﾓﾄｷﾖｼ|ﾏﾂｷﾖ|薬|ﾄﾞﾗｯｸﾞ|ｳｴﾙｼｱ|ｽｷﾞ|ｻﾝﾄﾞﾗｯｸﾞ|ｺｺｶﾗ|ｸﾘｴｲﾄ|DAISO|ﾀﾞｲｿ-|ｾﾘｱ|CANDO|ｷｬﾝﾄﾞｩ)/.test(d)) return 'Daily';
+
+  if (/(AMAZON|ｱﾏｿﾞﾝ|YAMADA|ﾔﾏﾀﾞ|ﾋﾞｯｸｶﾒﾗ|ﾖﾄﾞﾊﾞｼ|ﾆﾄﾘ|IKEA|無印|ﾑｼﾞﾙｼ|UNIQLO|ﾕﾆｸﾛ|GU|ｼﾏﾑﾗ|ZOZOTOWN|ZOZO|楽天|ﾗｸﾃﾝ|YAHOO|ﾏﾙｲ|ﾙﾐﾈ|ﾊﾟﾙｺ|ｲｾﾀﾝ|ﾀｶｼﾏﾔ|ﾐﾂｺｼ|ﾀﾞｲﾏﾙ|ｿｺﾞｳ|ｼｮｯﾌﾟ|SHOP|STORE|ｽﾄｱ|MALL|ﾓ-ﾙ|PAYPAY|ﾍﾟｲﾍﾟｲ|SQ\*|ST\*|SP \*|BASE)/.test(d)) return 'Shopping';
+
+  if (/(STEAM|NINTENDO|任天堂|PLAYSTATION|SONY|YOUTUB|NETFLIX|PRIME|DISNEY|HULU|U-NEXT|SPOTIFY|APPLE|GOOGLE|DMM|FANZA|PIXIV|DLｻｲﾄ|ｺﾐｯｸ|ﾏﾝｶﾞ|ｹﾞ-ﾑ|ｶﾗｵｹ|映画|ｼﾈﾏ|TOHO|ｲｵﾝｼﾈﾏ|TICKET|ﾁｹｯﾄ|ｲﾍﾞﾝﾄ|ﾗｲﾌﾞ|ﾌｧﾝｸﾗﾌﾞ|FC|本|書店|ﾌﾞｯｸ|BOOK|TSUTAYA|ﾂﾀﾔ|GEO|ｹﾞｵ|ｸﾞｯｽﾞ|ﾄｲｻﾞﾗｽ|ﾋﾒﾋﾅ|ﾏﾙｸ|HOSHIMACHI)/.test(d)) return 'Entertainment';
+
+  if (/(SUICA|PASMO|ICOCA|NANACO|WAON|EDY|JR|地下鉄|ﾒﾄﾛ|METRO|交通|ﾀｸｼ-|GO|UBER|DI DI|ﾊﾞｽ|航空|ANA|JAL|PEACH|JETSTAR|SKYMARK|PARKING|駐輪|駐車|ﾀｲﾑｽﾞ|TIMES|HELLO CYCLING|LUUP|ﾄﾞｺﾓ|DOCOMO|AU|SOFTBANK|UQ|Y!MOBILE|LINEMO|POVO|BIGLOBE|NIFTY|通信|ｲﾝﾀ-ﾈｯﾄ|WIFI|ETC|高速|NEXCO|ｶﾞｿﾘﾝ|ENEOS|出光|ｼｪﾙ|仙台|ﾁｬｰｼﾞｽﾎﾟｯﾄ)/.test(d)) return 'Transport';
+
+  if (/(美容|ｻﾛﾝ|ﾈｲﾙ|ｴｽﾃ|ﾏﾂｴｸ|ﾍｱ-|ｶｯﾄ|ｸﾘﾆｯｸ|病院|歯科|眼科|ﾒﾃﾞｨｶﾙ|薬局|ﾏｯｻ-ｼﾞ|整体|鍼灸|ｱｵﾔﾏﾌ-ﾁﾝ)/.test(d)) return 'Beauty';
+
+  if (/(HOTEL|ﾌﾞｯｷﾝｸﾞ|BOOKING|AGODA|EXPEDIA|JTB|HIS|旅行|旅館|ﾎﾃﾙ|ﾘｿﾞ-ﾄ|AIRBNB|ﾄﾗﾍﾞﾙ|TRIP|TOUR|ﾂｱ-)/.test(d)) return 'Travel';
+
   if (/(ガス|水道|電気|ﾃﾞﾝｷ|保険|税金|NHK|年金|電力|ｴﾈﾙｷﾞ-|東京瓦斯|TEPCO|家賃|ｱﾊﾟﾏﾝ)/.test(d)) return 'Fixed';
+
   return 'Others';
 };
 
@@ -37,6 +46,9 @@ const formatCurrency = (val) => new Intl.NumberFormat('ja-JP', { style: 'currenc
 export default function App() {
   const [allTransactions, setAllTransactions] = useState([]);
   const [customRules, setCustomRules] = useState({});
+  const [geminiKey, setGeminiKey] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
   const [view, setView] = useState('home'); // 'home', 'list', 'settings'
   const [targetMonth, setTargetMonth] = useState('');
   
@@ -48,12 +60,14 @@ export default function App() {
       
       const savedRules = localStorage.getItem('kakeibo_rules');
       if (savedRules) setCustomRules(JSON.parse(savedRules) || {});
+
+      const savedAiKey = localStorage.getItem('kakeibo_aikey');
+      if (savedAiKey) setGeminiKey(savedAiKey);
     } catch (e) {
       console.error("Local storage parsing error", e);
     }
   }, []);
 
-  // Compute available months uniquely sorting descending
   const availableMonths = useMemo(() => {
     const s = new Set();
     allTransactions.forEach(t => {
@@ -64,7 +78,6 @@ export default function App() {
     return Array.from(s).sort().reverse();
   }, [allTransactions]);
 
-  // Set default target month if none is selected
   useEffect(() => {
     if (!targetMonth && availableMonths.length > 0) {
       setTargetMonth(availableMonths[0]);
@@ -73,13 +86,11 @@ export default function App() {
     }
   }, [availableMonths, targetMonth]);
 
-  // Filtered operations
   const { filteredTx, summary, chartData, groupedTxs } = useMemo(() => {
     let filtered = allTransactions;
     if (targetMonth) {
       filtered = allTransactions.filter(t => t.date.startsWith(targetMonth) || (targetMonth === '不明な日付' && !t.date.includes('/')));
     }
-    // Sort descending by date
     filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     let totalExp = 0;
@@ -101,7 +112,6 @@ export default function App() {
       key: k
     })).sort((a, b) => b.value - a.value);
 
-    // Array of {date: "2026/03/31", items: [...]}
     const gTx = Object.keys(groups).sort((a, b) => new Date(b) - new Date(a)).map(d => ({
       date: d, items: groups[d]
     }));
@@ -109,7 +119,6 @@ export default function App() {
     return { filteredTx: filtered, summary: totalExp, chartData: cData, groupedTxs: gTx };
   }, [allTransactions, targetMonth]);
 
-  // Handle Month Switcher
   const changeMonth = (delta) => {
     const idx = availableMonths.indexOf(targetMonth);
     if (idx === -1) return;
@@ -139,7 +148,6 @@ export default function App() {
             }
           });
 
-          // Pre-process Cancellations (Negative matches positive -> both dropped)
           const negativeTxs = rawTxs.filter(t => t.amount < 0);
           const positiveTxs = rawTxs.filter(t => t.amount >= 0);
           let validTxsInFile = [];
@@ -150,11 +158,9 @@ export default function App() {
           });
           validTxsInFile = [...validTxsInFile, ...positiveTxs];
 
-          // Merge with Local DB
           let updatedDB = [...allTransactions];
           validTxsInFile.forEach(newTx => {
             if (newTx.amount < 0) {
-               // Retroactive cancellation against existing history
                const hIdx = updatedDB.findIndex(h => h.desc === newTx.desc && h.amount === Math.abs(newTx.amount));
                if (hIdx !== -1) updatedDB.splice(hIdx, 1);
                return; 
@@ -165,8 +171,6 @@ export default function App() {
 
           setAllTransactions(updatedDB);
           localStorage.setItem('kakeibo_data', JSON.stringify(updatedDB));
-          
-          // Switch view back to home to see imports
           setView('home'); 
         }
       });
@@ -187,6 +191,92 @@ export default function App() {
     localStorage.setItem('kakeibo_data', JSON.stringify(updatedTxs));
   };
 
+  const handleSaveKey = (val) => {
+    setGeminiKey(val);
+    localStorage.setItem('kakeibo_aikey', val);
+  };
+
+  // AI MAGIC CATEGORIZATION
+  const runAiCategorization = async () => {
+    if (!geminiKey) {
+       alert("設定タブからGeminiのAPIキーを登録してください！");
+       return;
+    }
+    
+    // Find unique "Others" descriptions
+    const others = allTransactions.filter(t => t.catKey === 'Others');
+    if (others.length === 0) {
+       alert("現在「その他」に分類されている明細はありません ✨");
+       return;
+    }
+
+    const uniqueDescs = [...new Set(others.map(t => t.desc))];
+    
+    setIsAiLoading(true);
+    try {
+      const prompt = `
+あなたは優秀な家計簿の仕分けAIです。
+以下のクレジットカードの決済名リストを、指定されたカテゴリーのいずれかに分類してJSONで返してください。
+【カテゴリーリスト】: Food, Daily, Shopping, Entertainment, Transport, Beauty, Travel, Fixed, Others
+【決済名リスト】:
+${JSON.stringify(uniqueDescs)}
+
+要件:
+- 必ずJSON形式でのみ返答すること。
+- キーは「決済名」、値は「カテゴリーキー（英語）」にすること。
+- どれにも当てはまらない場合のみOthersにすること。
+例: {"ウーバーイーツ": "Food", "APPLE COM": "Entertainment", "JR東日本": "Transport"}
+      `;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || "AI Error");
+
+      const textFormat = data.candidates[0].content.parts[0].text;
+      
+      // Clean up markdown block if present
+      const jsonStr = textFormat.replace(/```json/g, '').replace(/```/g, '').trim();
+      const aiResults = JSON.parse(jsonStr);
+
+      // Merge AI rules into our customRules
+      const newRules = { ...customRules };
+      for (const [desc, cat] of Object.entries(aiResults)) {
+         if (CATEGORY_MAP[cat] && cat !== 'Others') {
+             newRules[desc] = cat;
+         }
+      }
+
+      setCustomRules(newRules);
+      localStorage.setItem('kakeibo_rules', JSON.stringify(newRules));
+
+      // Apply to history
+      const updatedTxs = allTransactions.map(t => {
+         if (aiResults[t.desc] && aiResults[t.desc] !== 'Others' && CATEGORY_MAP[aiResults[t.desc]]) {
+             return { ...t, catKey: aiResults[t.desc] };
+         }
+         return t;
+      });
+
+      setAllTransactions(updatedTxs);
+      localStorage.setItem('kakeibo_data', JSON.stringify(updatedTxs));
+      
+      alert(`${Object.keys(aiResults).length}件の決済名をAIが自動で仕分け・学習しました！✨`);
+
+    } catch(err) {
+      console.error(err);
+      alert("AIの通信に失敗しました。APIキーが正しいか確認してください。(Error: " + err.message + ")");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const clearData = () => {
     if (window.confirm("これまでの記録をすべて完全に削除しますか？\n（この操作は取り消せません）")) {
       setAllTransactions([]);
@@ -203,8 +293,8 @@ export default function App() {
         </div>
         <div className="welcome-container animate-fade">
           <h3>家計簿を始めましょう</h3>
-          <p style={{color:'var(--text-secondary)', fontSize:'14px', marginTop:'8px'}}>
-             スマホでエクスポートしたクレジットカードのCSVを読み込むだけで、自動で分類・学習されます！<br/><br/>
+          <p style={{color:'var(--text-secondary)', fontSize:'14px', marginTop:'8px', lineHeight:'1.5'}}>
+             スマホでエクスポートしたクレジットカードのCSVを読み込むだけで、内蔵された強力な辞書が自動で分類します！<br/><br/>
              💡 ページをリロードしてもデータは残ります
           </p>
           <label className="welcome-upload">
@@ -213,9 +303,22 @@ export default function App() {
             <input type="file" accept=".csv" onChange={handleFileUpload} />
           </label>
         </div>
+        
+        {/* Bottom Nav */}
+        <div className="bottom-nav">
+           <div className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={() => setView('home')}>
+              <Home size={22} /><span className="nav-label">ホーム</span>
+           </div>
+           <div className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>
+              <Settings size={22} /><span className="nav-label">設定</span>
+           </div>
+        </div>
       </div>
     );
   }
+
+  // Count "Others" for AI Badge
+  const othersCount = filteredTx.filter(t => t.catKey === 'Others').length;
 
   return (
     <div id="root">
@@ -227,7 +330,6 @@ export default function App() {
 
       <div className="content-area">
          
-         {/* Switcher common across both Home and List */}
          {(view === 'home' || view === 'list') && (
            <div className="month-switcher">
               <button className="month-btn" onClick={() => changeMonth(1)} disabled={availableMonths.indexOf(targetMonth) >= availableMonths.length - 1}>
@@ -276,6 +378,29 @@ export default function App() {
                        </div>
                     ))}
                   </div>
+
+                  {/* AI Categorization Call to Action */}
+                  <div style={{marginTop:'24px', padding:'16px', background:'rgba(168, 85, 247, 0.05)', borderRadius:'16px', border:'1px solid rgba(168, 85, 247, 0.2)'}}>
+                     <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px'}}>
+                        <Sparkles color="#a855f7" size={20}/>
+                        <span style={{fontWeight:'700', color:'#a855f7', fontSize:'15px'}}>AIに「その他」を仕分けさせる</span>
+                     </div>
+                     <p style={{fontSize:'12px', color:'var(--text-secondary)', marginBottom:'16px'}}>
+                        現在、未分類（その他）のお買い物が <b>{othersCount}</b> 件あります。Googleの最新AI「Gemini」に判別させる新機能です！
+                     </p>
+                     <button 
+                       onClick={runAiCategorization} 
+                       disabled={isAiLoading || othersCount === 0 || !geminiKey}
+                       style={{
+                         width:'100%', padding:'12px', borderRadius:'10px', border:'none',
+                         background: (!geminiKey || othersCount === 0) ? '#e5e7eb' : 'linear-gradient(135deg, #a855f7, #6366f1)',
+                         color: (!geminiKey || othersCount === 0) ? '#9ca3af' : '#fff',
+                         fontWeight:'700', cursor: (!geminiKey || othersCount === 0) ? 'not-allowed' : 'pointer'
+                       }}>
+                        {isAiLoading ? 'AIが考え中...' : (!geminiKey ? 'まずは「設定」でAPIキーを入力' : `${othersCount}件の未分類をAIで整理する`)}
+                     </button>
+                  </div>
+
                 </div>
               ) : (
                 <div style={{textAlign:'center', marginTop:'40px', color:'var(--text-secondary)'}}>この月のデータはありません</div>
@@ -321,22 +446,45 @@ export default function App() {
          {view === 'settings' && (
             <div className="summary-container animate-fade">
                <h2 style={{marginBottom:'24px', fontSize:'24px', fontWeight:'800'}}>設定</h2>
+
+               <div className="chart-wrapper" style={{marginBottom:'24px'}}>
+                 <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
+                    <Sparkles color="#a855f7" /> 
+                    <span style={{fontWeight:'700', fontSize:'16px'}}>Gemini AI 連携 (無料)</span>
+                 </div>
+                 <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'16px', lineHeight:'1.5'}}>
+                   Google AI Studioから無料で取得できる「Gemini API キー」を入力すると、面倒な仕分けをすべて最新のAIに丸投げできます！<br/>
+                   ※キーはお使いのスマホ内にのみ安全に保存されます。
+                 </p>
+                 <div style={{display:'flex', alignItems:'center', background:'var(--bg-color)', border:'1px solid var(--border-color)', borderRadius:'10px', padding:'12px'}}>
+                    <Key size={18} color="var(--text-secondary)" style={{marginRight:'12px'}}/>
+                    <input 
+                      type="password" 
+                      placeholder="AIZ..."
+                      value={geminiKey}
+                      onChange={e => handleSaveKey(e.target.value)}
+                      style={{flex:1, border:'none', background:'transparent', outline:'none', fontSize:'14px', color:'var(--text-primary)'}}
+                    />
+                 </div>
+                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{display:'block', marginTop:'12px', fontSize:'12px', color:'var(--primary-color)', textDecoration:'none', fontWeight:'600'}}>
+                    👉 無料でAPIキーを取得する手順はこちら
+                 </a>
+               </div>
+
                <div className="chart-wrapper">
                  <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px'}}>
                     <ShieldAlert color="var(--danger-color)" /> 
                     <span style={{fontWeight:'700', fontSize:'16px'}}>データのリセット</span>
                  </div>
                  <p style={{fontSize:'13px', color:'var(--text-secondary)', marginBottom:'20px'}}>
-                   アプリ内に保存されているすべての明細データと、あなたが手動で学習させたカテゴリー分類ルールの記録を完全に消去します。
+                   アプリ内に保存されているすべての明細データと、学習したルールを完全に消去します。
                  </p>
                  <button className="settings-btn" onClick={clearData}>全データを削除する</button>
                </div>
             </div>
          )}
-
       </div>
 
-      {/* Floating Action Button (Shows when not in settings) */}
       {view !== 'settings' && (
         <label className="fab">
            <Plus size={28} />
