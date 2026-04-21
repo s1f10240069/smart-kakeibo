@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Temporary output / log files
+out.txt
+out2.txt
+debug_out.txt
+build_log.txt
+build_err.txt
+fix_token.js
+fix_token.mjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
