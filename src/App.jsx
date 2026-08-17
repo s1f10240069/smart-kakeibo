@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import {
   UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight,
-  Edit3, ShieldAlert, Sparkles, Key, Upload, Download, Eye, EyeOff,
+  Edit3, ShieldAlert, Sparkles, Key, Upload, Eye, EyeOff,
   CalendarDays, TrendingUp, TrendingDown, Minus, BarChart2, ChevronDown, ChevronUp, X
 } from 'lucide-react';
 import { listUsageMessageIds, fetchAndParseMessages, parseUsageEmail, DEFAULT_PARSE_LABELS } from './gmailSync';
@@ -124,9 +124,9 @@ export default function App() {
       const t = localStorage.getItem('kakeibo_google_token');
       const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
       if (t && exp > Date.now()) {
-        // 有効なトークンが残っている → 起動時に自動でメールをキャッチアップ
+        // 有効なトークンが残っている → 起動時に自動でクラウド同期＋メールをキャッチアップ
         setGoogleToken(t);
-        runGmailSync(t);
+        autoSyncCloud(t).then(() => runGmailSync(t));
       } else if (u) {
         // トークン切れ → サイレント再取得を試みる（失敗時はログインボタンのみ表示）
         trySilentGoogleLogin();
@@ -259,6 +259,7 @@ export default function App() {
     }
     setAllTransactions(db);
     localStorage.setItem('kakeibo_data', JSON.stringify(db));
+    touchLocalModified();
     if (files.length > 1) alert(`${files.length}件のCSVをまとめてインポートしました！\n合計 ${total}件追加。`);
     setView('home');
     e.target.value = '';
@@ -270,6 +271,7 @@ export default function App() {
     setCustomRules(newRules); localStorage.setItem('kakeibo_rules', JSON.stringify(newRules));
     const updated = allTransactions.map(t => t.desc === tx.desc ? { ...t, catKey: newCatKey } : t);
     setAllTransactions(updated); localStorage.setItem('kakeibo_data', JSON.stringify(updated));
+    touchLocalModified();
   };
 
   const callGemini = async (prompt) => {
@@ -298,6 +300,7 @@ export default function App() {
     );
     setCustomRules(newRules); localStorage.setItem('kakeibo_rules', JSON.stringify(newRules));
     setAllTransactions(updatedTxs); localStorage.setItem('kakeibo_data', JSON.stringify(updatedTxs));
+    touchLocalModified();
     return Object.keys(newRules).length - Object.keys(baseRules).length;
   };
 
@@ -369,6 +372,7 @@ export default function App() {
         setSyncStatus(`✅ ${u.email} としてログインしました！`);
       }
     } catch(e) { console.error(e); }
+    await autoSyncCloud(token);
     runGmailSync(token);
   };
 
@@ -412,9 +416,13 @@ export default function App() {
   };
 
   // ----- Google Drive (appDataFolder) クラウド同期 -----
+  // ローカルの変更時刻を記録し、クラウド(Driveのファイル更新時刻)と比べて
+  // 新しい方に揃える単純な自動同期（Dropbox的な「最後に更新された方が勝つ」方式）に使う。
+  const touchLocalModified = () => localStorage.setItem('kakeibo_local_modified', String(Date.now()));
+
   const getSyncFile = async (token) => {
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(`name='${DRIVE_FILE_NAME}'`)}&fields=files(id,name)`,
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(`name='${DRIVE_FILE_NAME}'`)}&fields=files(id,name,modifiedTime)`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (res.status === 401) throw new Error('トークンが無効です。再ログインしてください。');
@@ -423,17 +431,18 @@ export default function App() {
     return data.files?.[0] || null;
   };
 
-  const uploadToCloud = async () => {
-    if (!googleToken) return alert('Googleでログインしてください');
+  const uploadToCloud = async (tokenArg) => {
+    const token = tokenArg || googleToken;
+    if (!token) return alert('Googleでログインしてください');
     try {
       setSyncStatus('📡 アップロード中...');
       const exportObj = { transactions: allTransactions, rules: customRules, timestamp: new Date().toISOString() };
-      const existing = await getSyncFile(googleToken);
+      const existing = await getSyncFile(token);
       let res;
       if (existing) {
         res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media`, {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(exportObj),
         });
       } else {
@@ -444,7 +453,7 @@ export default function App() {
           `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(exportObj)}\r\n--${boundary}--`;
         res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${googleToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
           body,
         });
       }
@@ -453,19 +462,44 @@ export default function App() {
     } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); }
   };
 
-  const downloadFromCloud = async () => {
-    if (!googleToken) return alert('Googleでログインしてください');
+  // existingを渡すとファイル検索を再実行せずに済む（自動同期からの呼び出し用）
+  const downloadFromCloud = async (tokenArg, existingArg) => {
+    const token = tokenArg || googleToken;
+    if (!token) return alert('Googleでログインしてください');
     try {
       setSyncStatus('📡 読み込み中...');
-      const existing = await getSyncFile(googleToken);
+      const existing = existingArg || await getSyncFile(token);
       if (!existing) { setSyncStatus('❌ クラウドにデータが見つかりません。'); return; }
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, { headers: { Authorization: `Bearer ${googleToken}` } });
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error(`ダウンロード失敗 (${res.status})`);
       const obj = await res.json();
       if (obj.transactions) { setAllTransactions(obj.transactions); localStorage.setItem('kakeibo_data', JSON.stringify(obj.transactions)); }
       if (obj.rules) { setCustomRules(obj.rules); localStorage.setItem('kakeibo_rules', JSON.stringify(obj.rules)); }
-      setSyncStatus('✅ データを復元・同期しました！'); setView('home');
+      // ダウンロード直後はローカル=クラウドの状態なので、クラウドの更新時刻に揃えておく
+      // （Date.now()にすると「ローカルの方が新しい」と誤判定して次回すぐ再アップロードしてしまう）
+      localStorage.setItem('kakeibo_local_modified', String(new Date(existing.modifiedTime).getTime()));
+      setSyncStatus('✅ データを復元・同期しました！');
     } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); }
+  };
+
+  // ログイン時・アプリ起動時に呼ばれる自動同期。クラウドとローカルの更新時刻を比較し、
+  // 新しい方に揃える（古いクラウドデータでローカルの新しい変更を上書きしないため）。
+  const autoSyncCloud = async (tokenArg) => {
+    const token = tokenArg || googleToken;
+    if (!token) return;
+    try {
+      const existing = await getSyncFile(token);
+      if (!existing) { await uploadToCloud(token); return; }
+      const cloudModified = new Date(existing.modifiedTime).getTime();
+      const localModified = parseInt(localStorage.getItem('kakeibo_local_modified') || '0', 10);
+      if (cloudModified > localModified + 1000) {
+        await downloadFromCloud(token, existing);
+      } else if (localModified > cloudModified + 1000) {
+        await uploadToCloud(token);
+      } else {
+        setSyncStatus('✅ 最新の状態です');
+      }
+    } catch(err) { setSyncStatus(`❌ 同期エラー: ${err.message}`); }
   };
 
   // ----- Gmail 利用速報メールの自動取込 -----
@@ -528,6 +562,7 @@ export default function App() {
     const db = addTransactionFromParsed(JSON.parse(localStorage.getItem('kakeibo_data') || '[]'), rules, result, item.id);
     setAllTransactions(db);
     localStorage.setItem('kakeibo_data', JSON.stringify(db));
+    touchLocalModified();
     saveNeedsReview(needsReview.filter(r => r.id !== item.id));
   };
 
@@ -583,6 +618,7 @@ export default function App() {
 
       setAllTransactions(db);
       localStorage.setItem('kakeibo_data', JSON.stringify(db));
+      if (resolvedCount > 0) touchLocalModified();
       saveNeedsReview(pending);
       localStorage.setItem('kakeibo_gmail_last_sync', new Date().toISOString());
       setGmailSyncStatus(`✅ ${resolvedCount}件の明細を取り込みました${pending.length ? `（${pending.length}件は要確認のまま）` : ''}`);
@@ -913,13 +949,10 @@ export default function App() {
                 <button onClick={handleGoogleLogout} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}>ログアウト</button>
               </div>
 
-              {/* クラウド同期 */}
+              {/* クラウド同期（ログイン時・起動時に自動で同期されるため、手動保存は任意のバックアップ用） */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={uploadToCloud} style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+                <button onClick={() => uploadToCloud()} style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
                   <Upload size={16} /> クラウドへ保存
-                </button>
-                <button onClick={downloadFromCloud} style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
-                  <Download size={16} /> データを読み込む
                 </button>
               </div>
 
