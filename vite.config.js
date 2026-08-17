@@ -5,14 +5,4 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/smart-kakeibo/',
-  server: {
-    proxy: {
-      // GitHub Device Flow エンドポイント (CORS回避)
-      '/github-auth': {
-        target: 'https://github.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/github-auth/, ''),
-      },
-    },
-  },
 })

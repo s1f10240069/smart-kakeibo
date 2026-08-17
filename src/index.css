@@ -39,8 +39,9 @@ body {
 .mobile-only  { display: flex; }   /* モバイルデフォルト表示 */
 .desktop-only { display: none; }   /* デスクトップのみ表示 */
 
-/* ===== レイアウト (モバイル) ===== */
-#root {
+/* ===== レイアウト (モバイル) =====
+   index.htmlのマウント先div#rootとidが重複しないよう、アプリのルート要素は#app-rootとする */
+#app-root {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -292,7 +293,7 @@ body {
 @media (min-width: 900px) {
 
   /* ルートをフルワイドの横並びに */
-  #root {
+  #app-root {
     max-width: 100%;
     flex-direction: row;
     min-height: 100vh;
@@ -501,10 +502,12 @@ body {
   .kpi-card { margin-bottom: 0; }
   .ai-kpi-card { display: block; }
 
-  /* ===== ホーム2カラム ===== */
+  /* ===== ホーム2カラム =====
+     900px以上でも、中途半端な幅（サイドバー分を引くと片側が狭くなりすぎる範囲）では
+     auto-fit + minmaxで自動的に1カラムへ畳み、要素の折り返し崩れを防ぐ */
   .home-desktop-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: 24px;
   }
   .home-col { display: flex; flex-direction: column; }
@@ -532,7 +535,7 @@ body {
   /* ===== 設定 (PC 2カラム) ===== */
   .settings-desktop-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: 24px;
     align-items: start;
   }

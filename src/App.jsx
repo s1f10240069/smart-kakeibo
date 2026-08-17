@@ -7,8 +7,9 @@ import {
 import {
   UploadCloud, Plus, Home, List, Settings, ChevronLeft, ChevronRight,
   Edit3, ShieldAlert, Sparkles, Key, Upload, Download, Eye, EyeOff,
-  CalendarDays, TrendingUp, TrendingDown, Minus, BarChart2, ChevronDown, ChevronUp
+  CalendarDays, TrendingUp, TrendingDown, Minus, BarChart2, ChevronDown, ChevronUp, X
 } from 'lucide-react';
+import { listUsageMessageIds, fetchAndParseMessages, parseUsageEmail, DEFAULT_PARSE_LABELS } from './gmailSync';
 import './index.css';
 
 const CATEGORY_MAP = {
@@ -92,10 +93,15 @@ export default function App() {
   const [allTransactions, setAllTransactions] = useState([]);
   const [customRules, setCustomRules]         = useState({});
   const [geminiKey, setGeminiKey]             = useState('');
-  const [githubToken, setGithubToken]         = useState('');
-  const [githubUser, setGithubUser]           = useState(null); // { login, avatar_url }
-  const [deviceFlow, setDeviceFlow]           = useState(null); // { user_code, verification_uri, device_code, interval }
-  const [devicePolling, setDevicePolling]     = useState(false);
+  const [googleUser, setGoogleUser]           = useState(null); // { email, name, picture }
+  const [googleToken, setGoogleToken]         = useState('');
+  const [gmailSenders, setGmailSenders]       = useState([]);
+  const [senderInput, setSenderInput]         = useState('');
+  const [parseLabels, setParseLabels]         = useState(DEFAULT_PARSE_LABELS); // {amount, date, merchant}
+  const [labelInputs, setLabelInputs]         = useState({ amount: '', date: '', merchant: '' });
+  const [gmailSyncStatus, setGmailSyncStatus] = useState('');
+  const [needsReview, setNeedsReview]         = useState([]); // [{id, subject, bodyText}]
+  const [expandedReviewId, setExpandedReviewId] = useState(null);
   const [isAiLoading, setIsAiLoading]         = useState(false);
   const [aiAllMonthsLoading, setAiAllMonthsLoading] = useState(false);
   const [aiProgress, setAiProgress]           = useState('');
@@ -111,15 +117,22 @@ export default function App() {
       const d = localStorage.getItem('kakeibo_data');   if (d) setAllTransactions(JSON.parse(d) || []);
       const r = localStorage.getItem('kakeibo_rules');  if (r) setCustomRules(JSON.parse(r) || {});
       const k = localStorage.getItem('kakeibo_aikey'); if (k) setGeminiKey(k);
-      const g = localStorage.getItem('kakeibo_github_token'); if (g) {
-        setGithubToken(g);
-        // 保存済みトークンでユーザー情報を取得
-        fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${g}`, Accept: 'application/vnd.github+json' } })
-          .then(res => res.ok ? res.json() : null)
-          .then(u => { if (u) setGithubUser({ login: u.login, avatar_url: u.avatar_url }); })
-          .catch(() => {});
+      const senders = localStorage.getItem('kakeibo_gmail_senders'); if (senders) setGmailSenders(JSON.parse(senders) || []);
+      const labels = localStorage.getItem('kakeibo_gmail_labels'); if (labels) setParseLabels(JSON.parse(labels));
+      const review = localStorage.getItem('kakeibo_gmail_needs_review'); if (review) setNeedsReview(JSON.parse(review) || []);
+      const u = localStorage.getItem('kakeibo_google_user'); if (u) setGoogleUser(JSON.parse(u));
+      const t = localStorage.getItem('kakeibo_google_token');
+      const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
+      if (t && exp > Date.now()) {
+        // 有効なトークンが残っている → 起動時に自動でメールをキャッチアップ
+        setGoogleToken(t);
+        runGmailSync(t);
+      } else if (u) {
+        // トークン切れ → サイレント再取得を試みる（失敗時はログインボタンのみ表示）
+        trySilentGoogleLogin();
       }
     } catch(e) { console.error(e); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const availableMonths = useMemo(() => {
@@ -260,7 +273,7 @@ export default function App() {
   };
 
   const callGemini = async (prompt) => {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
@@ -330,122 +343,250 @@ export default function App() {
     } finally { setAiAllMonthsLoading(false); }
   };
 
-  // ----- GitHub Device Flow -----
-  // ※ GitHub OAuth App の client_id が必要。パブリックAppとして登録したものを使用。
-  // Device Flow は client_secret 不要でフロントエンドから安全に使用可能。
-  const GH_CLIENT_ID = 'Ov23lieqJW6a6kugNYGs';
-  // 開発: Viteプロキシ(/github-auth) / 本番: 環境変数 VITE_GH_PROXY_URL にCloudflare Worker等のURLを設定
-  const GH_PROXY = import.meta.env.VITE_GH_PROXY_URL || '/github-auth';
+  // ----- Google ログイン（Identity Services トークンクライアント） -----
+  // ※ Google Cloud ConsoleでOAuthクライアントID（ウェブアプリケーション）を作成し、下記に設定する。
+  // クライアントIDは非機密情報のためソースへの直書きで問題ない（client_secretは一切使用しない）。
+  const GOOGLE_CLIENT_ID = '709403348848-p3cmbc9g5l1kr4c8u7voorvolt5tcft3.apps.googleusercontent.com';
+  const GOOGLE_SCOPES = [
+    'openid', 'email', 'profile',
+    'https://www.googleapis.com/auth/drive.appdata',
+    'https://www.googleapis.com/auth/gmail.readonly',
+  ].join(' ');
+  const DRIVE_FILE_NAME = 'smart-kakeibo.json';
 
-  const startDeviceFlow = async () => {
+  const onGoogleTokenReceived = async (token, expiresIn) => {
+    const expiry = Date.now() + expiresIn * 1000;
+    setGoogleToken(token);
+    localStorage.setItem('kakeibo_google_token', token);
+    localStorage.setItem('kakeibo_google_token_expiry', String(expiry));
     try {
-      setSyncStatus('🔄 GitHubに接続中...');
-      const res = await fetch(`${GH_PROXY}/login/device/code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ client_id: GH_CLIENT_ID, scope: 'gist' }),
-      });
-      if (!res.ok) throw new Error(`Device Flow開始エラー (${res.status})`);
-      const data = await res.json();
-      setDeviceFlow({ user_code: data.user_code, verification_uri: data.verification_uri, device_code: data.device_code, interval: data.interval || 5 });
-      setSyncStatus('');
-      // ブラウザでGitHub認証ページを開く
-      window.open(data.verification_uri, '_blank');
-      // ポーリング開始
-      pollForToken(data.device_code, data.interval || 5);
-    } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); }
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const u = await res.json();
+        const profile = { email: u.email, name: u.name, picture: u.picture };
+        setGoogleUser(profile);
+        localStorage.setItem('kakeibo_google_user', JSON.stringify(profile));
+        setSyncStatus(`✅ ${u.email} としてログインしました！`);
+      }
+    } catch(e) { console.error(e); }
+    runGmailSync(token);
   };
 
-  const pollForToken = (device_code, interval) => {
-    setDevicePolling(true);
-    let attempts = 0;
-    const maxAttempts = 60; // 最大5分
-    const timer = setInterval(async () => {
-      attempts++;
-      if (attempts > maxAttempts) { clearInterval(timer); setDevicePolling(false); setSyncStatus('❌ タイムアウトしました。再度お試しください。'); return; }
-      try {
-        const res = await fetch(`${GH_PROXY}/login/oauth/access_token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ client_id: GH_CLIENT_ID, device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }),
-        });
-        const data = await res.json();
-        if (data.access_token) {
-          clearInterval(timer);
-          setDevicePolling(false);
-          const token = data.access_token;
-          setGithubToken(token);
-          localStorage.setItem('kakeibo_github_token', token);
-          // ユーザー情報取得
-          const uRes = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
-          const u = await uRes.json();
-          setGithubUser({ login: u.login, avatar_url: u.avatar_url });
-          setDeviceFlow(null);
-          setSyncStatus(`✅ ${u.login} としてログインしました！`);
-        }
-        // slow_down / authorization_pending は無視して継続
-      } catch(e) { /* ネットワークエラーは無視 */ }
-    }, interval * 1000);
+  const handleGoogleLogin = () => {
+    if (!window.google?.accounts?.oauth2) { setSyncStatus('❌ Google連携を読み込み中です。数秒待って再度お試しください。'); return; }
+    setSyncStatus('🔄 Googleに接続中...');
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GOOGLE_SCOPES,
+      callback: (resp) => {
+        if (resp.error) { setSyncStatus(`❌ エラー: ${resp.error}`); return; }
+        onGoogleTokenReceived(resp.access_token, resp.expires_in);
+      },
+    });
+    client.requestAccessToken({ prompt: 'consent' });
   };
 
-  const logoutGithub = () => {
-    setGithubToken('');
-    setGithubUser(null);
-    setDeviceFlow(null);
-    localStorage.removeItem('kakeibo_github_token');
+  const trySilentGoogleLogin = (attempt = 0) => {
+    if (!window.google?.accounts?.oauth2) {
+      if (attempt > 20) return; // ~6秒待って読み込まれなければ諦める（手動ログインボタンから再試行可能）
+      setTimeout(() => trySilentGoogleLogin(attempt + 1), 300);
+      return;
+    }
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GOOGLE_SCOPES,
+      callback: (resp) => { if (!resp.error) onGoogleTokenReceived(resp.access_token, resp.expires_in); },
+    });
+    client.requestAccessToken({ prompt: '' });
+  };
+
+  const handleGoogleLogout = () => {
+    if (googleToken && window.google?.accounts?.oauth2?.revoke) {
+      window.google.accounts.oauth2.revoke(googleToken, () => {});
+    }
+    setGoogleUser(null); setGoogleToken('');
+    localStorage.removeItem('kakeibo_google_user');
+    localStorage.removeItem('kakeibo_google_token');
+    localStorage.removeItem('kakeibo_google_token_expiry');
     setSyncStatus('ログアウトしました。');
   };
 
-  // ----- GitHub Gist Sync -----
-  const makeGhHeaders = (token) => ({
-    Authorization: `Bearer ${token.trim()}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'Content-Type': 'application/json',
-  });
-
-  const getSyncGist = async (token) => {
-    const res = await fetch('https://api.github.com/gists', { headers: makeGhHeaders(token) });
-    if (res.status === 401) throw new Error('トークンが無効です。');
-    if (!res.ok) throw new Error(`GitHub APIエラー (${res.status})`);
-    const gists = await res.json();
-    return gists.find(g => g.description === 'smart-kakeibo-cloud-sync');
+  // ----- Google Drive (appDataFolder) クラウド同期 -----
+  const getSyncFile = async (token) => {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(`name='${DRIVE_FILE_NAME}'`)}&fields=files(id,name)`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (res.status === 401) throw new Error('トークンが無効です。再ログインしてください。');
+    if (!res.ok) throw new Error(`Drive APIエラー (${res.status})`);
+    const data = await res.json();
+    return data.files?.[0] || null;
   };
 
   const uploadToCloud = async () => {
-    if (!githubToken) return alert('GitHubのトークンを入力してください');
+    if (!googleToken) return alert('Googleでログインしてください');
     try {
       setSyncStatus('📡 アップロード中...');
-      // ⚠️ APIキーはGitHubのシークレットスキャン対象になるためGistには保存しない
       const exportObj = { transactions: allTransactions, rules: customRules, timestamp: new Date().toISOString() };
-      const gistData = { description: 'smart-kakeibo-cloud-sync', public: false, files: { 'smart-kakeibo.json': { content: JSON.stringify(exportObj) } } };
-      const existing = await getSyncGist(githubToken);
-      const url = existing ? `https://api.github.com/gists/${existing.id}` : 'https://api.github.com/gists';
-      const res = await fetch(url, { method: existing ? 'PATCH' : 'POST', headers: makeGhHeaders(githubToken), body: JSON.stringify(gistData) });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `失敗(${res.status})`); }
-      localStorage.setItem('kakeibo_github_token', githubToken.trim());
-      setSyncStatus('✅ データをGitHubクラウドに保存しました');
+      const existing = await getSyncFile(googleToken);
+      let res;
+      if (existing) {
+        res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(exportObj),
+        });
+      } else {
+        const boundary = 'kakeibo_boundary_' + Math.random().toString(36).slice(2);
+        const metadata = { name: DRIVE_FILE_NAME, parents: ['appDataFolder'] };
+        const body =
+          `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+          `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(exportObj)}\r\n--${boundary}--`;
+        res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${googleToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+          body,
+        });
+      }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `失敗(${res.status})`); }
+      setSyncStatus('✅ データをGoogle Driveに保存しました');
     } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); }
   };
 
   const downloadFromCloud = async () => {
-    if (!githubToken) return alert('GitHubのトークンを入力してください');
+    if (!googleToken) return alert('Googleでログインしてください');
     try {
       setSyncStatus('📡 読み込み中...');
-      const existing = await getSyncGist(githubToken);
+      const existing = await getSyncFile(googleToken);
       if (!existing) { setSyncStatus('❌ クラウドにデータが見つかりません。'); return; }
-      const res = await fetch(`https://api.github.com/gists/${existing.id}`, { headers: makeGhHeaders(githubToken) });
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, { headers: { Authorization: `Bearer ${googleToken}` } });
       if (!res.ok) throw new Error(`ダウンロード失敗 (${res.status})`);
-      const detail = await res.json();
-      const content = detail.files['smart-kakeibo.json']?.content;
-      if (!content) throw new Error('ファイル内容が見つかりません。');
-      const obj = JSON.parse(content);
+      const obj = await res.json();
       if (obj.transactions) { setAllTransactions(obj.transactions); localStorage.setItem('kakeibo_data', JSON.stringify(obj.transactions)); }
       if (obj.rules) { setCustomRules(obj.rules); localStorage.setItem('kakeibo_rules', JSON.stringify(obj.rules)); }
-      // APIキーはGistに保存していないためダウンロードでは復元しない（端末ローカルで管理）
-      localStorage.setItem('kakeibo_github_token', githubToken.trim());
       setSyncStatus('✅ データを復元・同期しました！'); setView('home');
     } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); }
+  };
+
+  // ----- Gmail 利用速報メールの自動取込 -----
+  const addGmailSender = () => {
+    const v = senderInput.trim();
+    if (!v || gmailSenders.includes(v)) { setSenderInput(''); return; }
+    const next = [...gmailSenders, v];
+    setGmailSenders(next);
+    localStorage.setItem('kakeibo_gmail_senders', JSON.stringify(next));
+    setSenderInput('');
+  };
+
+  const removeGmailSender = (value) => {
+    const next = gmailSenders.filter(s => s !== value);
+    setGmailSenders(next);
+    localStorage.setItem('kakeibo_gmail_senders', JSON.stringify(next));
+  };
+
+  // メール解析キーワード（金額/日付/利用先）の追加・削除
+  const addParseLabel = (category) => {
+    const v = labelInputs[category].trim();
+    if (!v || parseLabels[category].includes(v)) { setLabelInputs({ ...labelInputs, [category]: '' }); return; }
+    const next = { ...parseLabels, [category]: [...parseLabels[category], v] };
+    setParseLabels(next);
+    localStorage.setItem('kakeibo_gmail_labels', JSON.stringify(next));
+    setLabelInputs({ ...labelInputs, [category]: '' });
+  };
+
+  const removeParseLabel = (category, value) => {
+    const next = { ...parseLabels, [category]: parseLabels[category].filter(v => v !== value) };
+    setParseLabels(next);
+    localStorage.setItem('kakeibo_gmail_labels', JSON.stringify(next));
+  };
+
+  const saveNeedsReview = (list) => {
+    setNeedsReview(list);
+    localStorage.setItem('kakeibo_gmail_needs_review', JSON.stringify(list));
+  };
+
+  const addTransactionFromParsed = (db, rules, result, msgId) => {
+    db.push({
+      id: Math.random().toString(36).substr(2, 9),
+      date: result.date,
+      desc: result.desc || '利用先不明',
+      amount: result.amount,
+      catKey: categorize(result.desc || '', rules),
+      source: 'gmail',
+      gmailMsgId: msgId,
+    });
+    return db;
+  };
+
+  // 「要確認」の1件を、現在保存済みのキーワードで再解析する（メール本文はキャッシュ済み）
+  const retryParseReview = (item) => {
+    const labels = JSON.parse(localStorage.getItem('kakeibo_gmail_labels') || 'null') || DEFAULT_PARSE_LABELS;
+    const result = parseUsageEmail(item.bodyText, labels);
+    if (!result) { alert('まだ抽出できませんでした。キーワードを見直してください。'); return; }
+
+    const rules = JSON.parse(localStorage.getItem('kakeibo_rules') || '{}');
+    const db = addTransactionFromParsed(JSON.parse(localStorage.getItem('kakeibo_data') || '[]'), rules, result, item.id);
+    setAllTransactions(db);
+    localStorage.setItem('kakeibo_data', JSON.stringify(db));
+    saveNeedsReview(needsReview.filter(r => r.id !== item.id));
+  };
+
+  // localStorageから直接読み書きすることで、呼び出しタイミング（起動直後のstate反映前など）に
+  // 依存せず安全にマージできるようにしている。
+  // 「要確認」で保留中のメールは日時での絞り込みに関係なく毎回ローカルで再解析し直すため、
+  // 一度取りこぼした古いメールもキーワードを直せば拾い直せる。
+  const runGmailSync = async (tokenArg) => {
+    const token = tokenArg || googleToken;
+    if (!token) return;
+    const senders = JSON.parse(localStorage.getItem('kakeibo_gmail_senders') || '[]');
+    if (senders.length === 0) { setGmailSyncStatus('設定で送信元メールアドレスを追加してください'); return; }
+    try {
+      const labels = JSON.parse(localStorage.getItem('kakeibo_gmail_labels') || 'null') || DEFAULT_PARSE_LABELS;
+      const rules = JSON.parse(localStorage.getItem('kakeibo_rules') || '{}');
+      let db = JSON.parse(localStorage.getItem('kakeibo_data') || '[]');
+      let pending = JSON.parse(localStorage.getItem('kakeibo_gmail_needs_review') || '[]');
+      let resolvedCount = 0;
+
+      // 1. 保留中の「要確認」メールを、現在のキーワードでまずローカル再解析（API呼び出し不要）
+      if (pending.length > 0) {
+        setGmailSyncStatus(`🔁 保留中の${pending.length}件を再解析中...`);
+        const stillPending = [];
+        pending.forEach(item => {
+          const result = item.bodyText ? parseUsageEmail(item.bodyText, labels) : null;
+          if (result) { db = addTransactionFromParsed(db, rules, result, item.id); resolvedCount++; }
+          else stillPending.push(item);
+        });
+        pending = stillPending;
+      }
+
+      // 2. 新着メールを検索（前回同期以降。初回は過去90日分）
+      setGmailSyncStatus('🔍 新着メールを検索中...');
+      const lastSyncStr = localStorage.getItem('kakeibo_gmail_last_sync');
+      const sinceTs = lastSyncStr
+        ? Math.floor(new Date(lastSyncStr).getTime() / 1000)
+        : Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
+      const ids = await listUsageMessageIds(token, senders, sinceTs);
+      const knownIds = new Set([
+        ...db.filter(t => t.gmailMsgId).map(t => t.gmailMsgId),
+        ...pending.map(r => r.id),
+      ]);
+      const newIds = ids.filter(id => !knownIds.has(id));
+
+      if (newIds.length > 0) {
+        const { parsed, needsReview: nr } = await fetchAndParseMessages(token, newIds, labels, (done, total) =>
+          setGmailSyncStatus(`📧 ${total}件中 ${done}件処理中...`)
+        );
+        parsed.forEach(p => { db = addTransactionFromParsed(db, rules, p, p.id); });
+        resolvedCount += parsed.length;
+        pending = [...pending, ...nr];
+      }
+
+      setAllTransactions(db);
+      localStorage.setItem('kakeibo_data', JSON.stringify(db));
+      saveNeedsReview(pending);
+      localStorage.setItem('kakeibo_gmail_last_sync', new Date().toISOString());
+      setGmailSyncStatus(`✅ ${resolvedCount}件の明細を取り込みました${pending.length ? `（${pending.length}件は要確認のまま）` : ''}`);
+    } catch(err) { setGmailSyncStatus(`❌ エラー: ${err.message}`); }
   };
 
   const clearData = () => {
@@ -652,7 +793,7 @@ export default function App() {
                   <td className="tx-table-date">{tx.date}</td>
                   <td className="tx-table-desc">
                     <span className="tx-table-icon">{CATEGORY_MAP[tx.catKey].icon}</span>
-                    {tx.desc}
+                    {tx.desc}{tx.source === 'gmail' && <span title="メールから自動取込" style={{ marginLeft: '6px' }}>📧</span>}
                   </td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -690,7 +831,7 @@ export default function App() {
                 <div key={tx.id} className="tx-item">
                   <div className="tx-icon-wrapper">{CATEGORY_MAP[tx.catKey].icon}</div>
                   <div className="tx-details">
-                    <div className="tx-desc" title={tx.desc}>{tx.desc}</div>
+                    <div className="tx-desc" title={tx.desc}>{tx.desc}{tx.source === 'gmail' && <span style={{ marginLeft: '4px' }}>📧</span>}</div>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                       <select className="tx-cat-select" value={tx.catKey} onChange={e => updateCategory(tx.id, e.target.value)}>
                         {Object.keys(CATEGORY_MAP).map(k => <option key={k} value={k}>{CATEGORY_MAP[k].name}</option>)}
@@ -751,27 +892,29 @@ export default function App() {
           </div>
         </div>
 
-        {/* クラウド同期 */}
+        {/* Googleアカウント（ログイン・クラウド同期・メール自動取込） */}
         <div className="chart-wrapper">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <Sparkles color="var(--text-primary)" /><span style={{ fontWeight: '700', fontSize: '16px' }}>クラウド同期 (GitHub)</span>
+            <Sparkles color="var(--text-primary)" /><span style={{ fontWeight: '700', fontSize: '16px' }}>Googleアカウント</span>
           </div>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>
-            GitHubアカウントでログインしてプライベートGistに安全に同期します。
+            Googleでログインすると、クラウド同期とクレジットカード利用速報メールの自動取込が使えます。
           </p>
 
           {/* ログイン済み */}
-          {githubUser ? (
+          {googleUser ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-color)', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
-                <img src={githubUser.avatar_url} alt={githubUser.login} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+                <img src={googleUser.picture} alt={googleUser.email} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '700', fontSize: '14px' }}>{githubUser.login}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>GitHubアカウントで認証済み</div>
+                  <div style={{ fontWeight: '700', fontSize: '14px' }}>{googleUser.name || googleUser.email}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{googleUser.email}</div>
                 </div>
-                <button onClick={logoutGithub} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}>ログアウト</button>
+                <button onClick={handleGoogleLogout} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}>ログアウト</button>
               </div>
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+
+              {/* クラウド同期 */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                 <button onClick={uploadToCloud} style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
                   <Upload size={16} /> クラウドへ保存
                 </button>
@@ -779,30 +922,109 @@ export default function App() {
                   <Download size={16} /> データを読み込む
                 </button>
               </div>
-            </div>
-          ) : deviceFlow ? (
-            /* Device Flow 認証待ち */
-            <div style={{ padding: '20px', background: 'rgba(99,102,241,0.06)', borderRadius: '14px', border: '1px solid rgba(99,102,241,0.2)', textAlign: 'center' }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>GitHubで下記のコードを入力してください</div>
-              <div style={{ fontSize: '32px', fontWeight: '900', letterSpacing: '6px', color: 'var(--primary-color)', fontFamily: 'monospace', marginBottom: '12px', padding: '12px', background: 'var(--bg-color)', borderRadius: '10px', border: '2px solid var(--primary-color)' }}>
-                {deviceFlow.user_code}
+
+              {/* メール自動取込 */}
+              <div style={{ padding: '16px', background: 'rgba(99,102,241,0.05)', borderRadius: '14px', border: '1px solid rgba(99,102,241,0.2)' }}>
+                <div style={{ fontWeight: '700', fontSize: '14px', marginBottom: '8px' }}>📧 メール自動取込</div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: '1.6' }}>
+                  登録した送信元からの利用速報メールを検索し、金額・利用日が読み取れたものだけ明細に追加します。
+                </p>
+
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                  <input type="text" placeholder="例: rakuten-card.co.jp" value={senderInput}
+                    onChange={e => setSenderInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addGmailSender(); }}
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '13px', outline: 'none' }} />
+                  <button onClick={addGmailSender} style={{ padding: '0 16px', borderRadius: '8px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>追加</button>
+                </div>
+
+                {gmailSenders.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                    {gmailSenders.map(s => (
+                      <span key={s} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '999px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+                        {s}
+                        <X size={12} style={{ cursor: 'pointer' }} onClick={() => removeGmailSender(s)} />
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* メール解析キーワード（カード会社ごとの言い回しの違いをUIで吸収する） */}
+                <div style={{ marginBottom: '14px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '8px' }}>解析キーワード（メールの文言に合わせて調整）</div>
+                  {[
+                    { key: 'amount', label: '金額' },
+                    { key: 'date', label: '日付' },
+                    { key: 'merchant', label: '利用先' },
+                  ].map(({ key, label }) => (
+                    <div key={key} style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{label}のキーワード</div>
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '5px' }}>
+                        <input type="text" placeholder={`例: ${DEFAULT_PARSE_LABELS[key][0]}`} value={labelInputs[key]}
+                          onChange={e => setLabelInputs({ ...labelInputs, [key]: e.target.value })}
+                          onKeyDown={e => { if (e.key === 'Enter') addParseLabel(key); }}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '12px', outline: 'none' }} />
+                        <button onClick={() => addParseLabel(key)} style={{ padding: '0 12px', borderRadius: '8px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>追加</button>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                        {parseLabels[key].map(v => (
+                          <span key={v} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 7px', borderRadius: '999px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', fontSize: '11px' }}>
+                            {v}
+                            <X size={10} style={{ cursor: 'pointer' }} onClick={() => removeParseLabel(key, v)} />
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={() => runGmailSync()} disabled={gmailSenders.length === 0}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: gmailSenders.length === 0 ? '#e5e7eb' : 'linear-gradient(135deg,#6366f1,#a855f7)', color: gmailSenders.length === 0 ? '#9ca3af' : '#fff', fontWeight: '700', fontSize: '13px', cursor: gmailSenders.length === 0 ? 'not-allowed' : 'pointer' }}>
+                  今すぐメールを確認
+                </button>
+
+                {gmailSyncStatus && (
+                  <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: '600', color: 'var(--primary-color)' }}>{gmailSyncStatus}</div>
+                )}
+
+                {needsReview.length > 0 && (
+                  <div style={{ marginTop: '12px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>要確認（自動で明細化されなかったメール、クリックで本文を確認）</div>
+                    <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                      {needsReview.map(item => (
+                        <div key={item.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border-color)' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', cursor: item.bodyText ? 'pointer' : 'default' }}
+                            onClick={() => item.bodyText && setExpandedReviewId(expandedReviewId === item.id ? null : item.id)}>
+                            {item.bodyText && (expandedReviewId === item.id ? <ChevronUp size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> : <ChevronDown size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />)}
+                            {item.subject}
+                          </div>
+                          {expandedReviewId === item.id && item.bodyText && (
+                            <div style={{ marginTop: '6px' }}>
+                              <pre style={{ maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: '11px', color: 'var(--text-primary)', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', margin: 0 }}>{item.bodyText}</pre>
+                              <button onClick={() => retryParseReview(item)}
+                                style={{ marginTop: '6px', padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+                                このメールを再解析
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <a href={deviceFlow.verification_uri} target="_blank" rel="noreferrer"
-                style={{ display: 'inline-block', marginBottom: '16px', fontSize: '13px', color: 'var(--primary-color)', textDecoration: 'underline' }}>
-                {deviceFlow.verification_uri} を開く
-              </a>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                {devicePolling && <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1s infinite' }} />}
-                {devicePolling ? '認証を待機中...' : '処理中...'}
-              </div>
-              <button onClick={() => { setDeviceFlow(null); setDevicePolling(false); }} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}>キャンセル</button>
             </div>
           ) : (
             /* 未ログイン */
-            <button onClick={startDeviceFlow}
-              style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', padding: '14px', borderRadius: '12px', border: 'none', background: '#24292e', color: '#fff', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}>
-              <svg width="20" height="20" viewBox="0 0 16 16" fill="white"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>
-              GitHubでログイン
+            <button onClick={handleGoogleLogin}
+              style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#fff', color: '#3c4043', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}>
+              <svg width="18" height="18" viewBox="0 0 48 48">
+                <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z" />
+                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+                <path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.2-5.6l-6.6-5.4C29.7 34.9 27 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z" />
+                <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.7l6.6 5.4C41.3 35.9 44 30.3 44 24c0-1.3-.1-2.7-.4-3.5z" />
+              </svg>
+              Googleでログイン
             </button>
           )}
 
@@ -829,7 +1051,7 @@ export default function App() {
 
   // ===== メインレンダー =====
   return (
-    <div id="root">
+    <div id="app-root">
 
       {/* ===== PC サイドバー ===== */}
       <aside className="sidebar">
