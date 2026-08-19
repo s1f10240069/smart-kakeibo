@@ -1,7 +1,8 @@
 import { Home, List, Settings, ChevronLeft, ChevronRight, CalendarDays, Upload } from 'lucide-react';
 import { formatCurrency } from '../lib/categories';
+import SyncStatusIndicator from './SyncStatusIndicator';
 
-const Sidebar = ({ view, onSelectView, hasData, targetMonth, availableMonths, monthTotals, onChangeMonth, onOpenCalendar, onSelectMonth, onFileUpload }) => (
+const Sidebar = ({ view, onSelectView, hasData, targetMonth, availableMonths, monthTotals, onChangeMonth, onOpenCalendar, onSelectMonth, onFileUpload, googleUser, syncPhase, reLoginNeeded, onReLogin }) => (
   <aside className="sidebar">
     <div className="sidebar-brand">🧾 スマート明細</div>
 
@@ -45,6 +46,11 @@ const Sidebar = ({ view, onSelectView, hasData, targetMonth, availableMonths, mo
 
     {/* CSVアップロード */}
     <div className="sidebar-footer">
+      {googleUser && (
+        <div style={{ marginBottom: '10px' }}>
+          <SyncStatusIndicator syncPhase={syncPhase} reLoginNeeded={reLoginNeeded} onReLogin={onReLogin} />
+        </div>
+      )}
       <label className="sidebar-upload-btn">
         <Upload size={15} />CSVをインポート
         <input type="file" accept=".csv" multiple onChange={onFileUpload} style={{ display: 'none' }} />

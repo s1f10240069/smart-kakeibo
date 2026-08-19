@@ -100,6 +100,7 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
       const rules = JSON.parse(localStorage.getItem('kakeibo_rules') || '{}');
       let db = JSON.parse(localStorage.getItem('kakeibo_data') || '[]');
       let pending = JSON.parse(localStorage.getItem('kakeibo_gmail_needs_review') || '[]');
+      const initialPendingCount = pending.length;
       let resolvedCount = 0;
 
       // 1. 保留中の「要確認」メールを、現在のキーワードでまずローカル再解析（API呼び出し不要）
@@ -138,7 +139,7 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
 
       setAllTransactions(db);
       localStorage.setItem('kakeibo_data', JSON.stringify(db));
-      if (resolvedCount > 0) touchLocalModified();
+      if (resolvedCount > 0 || pending.length !== initialPendingCount) touchLocalModified();
       saveNeedsReview(pending);
       localStorage.setItem('kakeibo_gmail_last_sync', new Date().toISOString());
       setGmailSyncStatus(`✅ ${resolvedCount}件の明細を取り込みました${pending.length ? `（${pending.length}件は要確認のまま）` : ''}`);
@@ -150,7 +151,7 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
     parseLabels, labelInputs, setLabelInputs,
     gmailSyncStatus, needsReview, expandedReviewId, setExpandedReviewId,
     addGmailSender, removeGmailSender, addParseLabel, removeParseLabel,
-    retryParseReview, runGmailSync,
+    retryParseReview, runGmailSync, saveNeedsReview,
   };
 }
 

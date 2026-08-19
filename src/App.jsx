@@ -8,6 +8,7 @@ import { useGmailSync } from './hooks/useGmailSync';
 import MonthCalendarModal from './components/MonthCalendarModal';
 import MonthSwitcher from './components/MonthSwitcher';
 import Sidebar from './components/Sidebar';
+import SyncStatusIndicator from './components/SyncStatusIndicator';
 import WelcomeView from './components/views/WelcomeView';
 import HomeView from './components/views/HomeView';
 import ListView from './components/views/ListView';
@@ -29,7 +30,7 @@ export default function App() {
     filteredTx, summary, chartData, groupedTxs,
     prevMonthData, allMonthsSummary,
     othersCount, currentOthersCount, diffAmount, diffPct,
-    touchLocalModified, changeMonth, updateCategory, applyAiResults,
+    touchLocalModified, localModifiedTick, changeMonth, updateCategory, applyAiResults,
     handleFileUpload: handleFileUploadRaw,
   } = useTransactions();
 
@@ -37,7 +38,8 @@ export default function App() {
 
   const google = useGoogleAuth({
     allTransactions, customRules, setAllTransactions, setCustomRules,
-    runGmailSync: gmail.runGmailSync,
+    needsReview: gmail.needsReview, setNeedsReview: gmail.saveNeedsReview,
+    runGmailSync: gmail.runGmailSync, localModifiedTick,
   });
 
   const ai = useAi({ allTransactions, customRules, filteredTx, applyAiResults });
@@ -61,9 +63,14 @@ export default function App() {
   const handleFileUpload = async (e) => { await handleFileUploadRaw(e); setView('home'); };
 
   const clearData = () => {
-    if (window.confirm('全データを完全削除しますか？（クラウドは消えません）')) {
+    const note = google.googleUser
+      ? '\n\nGoogleにログイン中のため、次回の自動同期でクラウドの内容が復元されます。クラウドのデータも削除したい場合は、先にログアウトしてから実行してください。'
+      : '';
+    if (window.confirm(`全データを完全削除しますか？（クラウドは消えません）${note}`)) {
       setAllTransactions([]); setCustomRules({});
       localStorage.removeItem('kakeibo_data'); localStorage.removeItem('kakeibo_rules');
+      // 注意: ここでtouchLocalModified()は呼ばない。呼ぶと「ローカルが最新」と誤認識され、
+      // 自動アップロードでクラウド側のデータまで空で上書きしてしまう。
       setView('home');
     }
   };
@@ -85,6 +92,10 @@ export default function App() {
         onOpenCalendar={() => setShowCalendar(true)}
         onSelectMonth={setTargetMonth}
         onFileUpload={handleFileUpload}
+        googleUser={google.googleUser}
+        syncPhase={google.syncPhase}
+        reLoginNeeded={google.reLoginNeeded}
+        onReLogin={google.handleGoogleLogin}
       />
 
       {/* ===== メインエリア ===== */}
@@ -92,7 +103,16 @@ export default function App() {
         {/* モバイル専用ヘッダー */}
         <div className="app-header mobile-only">
           <div className="app-title">スマート明細</div>
-          <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '14px' }}>{filteredTx.length}件</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {google.googleUser && (
+              <SyncStatusIndicator
+                syncPhase={google.syncPhase}
+                reLoginNeeded={google.reLoginNeeded}
+                onReLogin={google.handleGoogleLogin}
+              />
+            )}
+            <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '14px' }}>{filteredTx.length}件</div>
+          </div>
         </div>
 
         {/* PC 専用トップバー */}
@@ -144,6 +164,7 @@ export default function App() {
                 googleUser: google.googleUser,
                 onLogout: google.handleGoogleLogout,
                 onUpload: () => google.uploadToCloud(),
+                onDownload: () => google.downloadFromCloud(),
                 onLogin: google.handleGoogleLogin,
                 syncStatus: google.syncStatus,
               }}

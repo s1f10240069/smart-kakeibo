@@ -1,9 +1,9 @@
-import { Sparkles, Key, Eye, EyeOff, Upload, X, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Sparkles, Key, Eye, EyeOff, Upload, Download, X, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
 import { DEFAULT_PARSE_LABELS } from '../../gmailSync';
 
 const SettingsView = ({ ai, google, gmail, onClearData }) => {
   const { geminiKey, onGeminiKeyChange, showKey, onToggleShowKey, othersCount, aiProgress, aiAllMonthsLoading, onRunAiAllMonths } = ai;
-  const { googleUser, onLogout, onUpload, onLogin, syncStatus } = google;
+  const { googleUser, onLogout, onUpload, onDownload, onLogin, syncStatus } = google;
   const { senderInput, setSenderInput, onAddSender, senders, onRemoveSender, labelInputs, setLabelInputs, onAddParseLabel, parseLabels, onRemoveParseLabel, onRunSync, syncStatus: gmailSyncStatus, needsReview, expandedReviewId, setExpandedReviewId, onRetryReview } = gmail;
 
   return (
@@ -66,10 +66,15 @@ const SettingsView = ({ ai, google, gmail, onClearData }) => {
                 <button onClick={onLogout} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}>ログアウト</button>
               </div>
 
-              {/* クラウド同期（ログイン時・起動時に自動で同期されるため、手動保存は任意のバックアップ用） */}
+              {/* クラウド同期（自動で常時同期されるため、この2つのボタンは万一のための手動バックアップ・復元用） */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                 <button onClick={onUpload} style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
                   <Upload size={16} /> クラウドへ保存
+                </button>
+                <button
+                  onClick={() => { if (window.confirm('端末のデータをクラウドの内容で上書きします。よろしいですか？')) onDownload(); }}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+                  <Download size={16} /> クラウドから復元
                 </button>
               </div>
 

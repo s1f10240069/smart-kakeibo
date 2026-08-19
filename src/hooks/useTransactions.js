@@ -12,6 +12,7 @@ export function useTransactions() {
     try { return JSON.parse(localStorage.getItem('kakeibo_rules') || '{}'); } catch { return {}; }
   });
   const [targetMonth, setTargetMonth] = useState('');
+  const [localModifiedTick, setLocalModifiedTick] = useState(0);
 
   const availableMonths = useMemo(() => {
     const s = new Set();
@@ -83,7 +84,12 @@ export function useTransactions() {
       return { month: m, label, total };
     }), [allTransactions, availableMonths]);
 
-  const touchLocalModified = () => localStorage.setItem('kakeibo_local_modified', String(Date.now()));
+  // localStorageのタイムスタンプ更新に加えてtickをインクリメントし、
+  // useGoogleAuth側でこの呼び出しだけを厳密に検知して自動アップロードのトリガーにできるようにする
+  const touchLocalModified = () => {
+    localStorage.setItem('kakeibo_local_modified', String(Date.now()));
+    setLocalModifiedTick(t => t + 1);
+  };
 
   const changeMonth = (delta) => {
     const idx = availableMonths.indexOf(targetMonth);
@@ -139,7 +145,7 @@ export function useTransactions() {
     filteredTx, summary, chartData, groupedTxs,
     prevMonthData, allMonthsSummary,
     othersCount, currentOthersCount, diffAmount, diffPct,
-    touchLocalModified,
+    touchLocalModified, localModifiedTick,
     changeMonth, handleFileUpload, updateCategory, applyAiResults,
   };
 }
