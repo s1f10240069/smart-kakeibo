@@ -105,7 +105,7 @@ const HomeView = ({
 
               return (
                 <div key={cat.key} className="cat-accordion-group">
-                  <div className="cat-list-item" onClick={() => onToggleCategory(isExpanded ? null : cat.key)} style={{ cursor: 'pointer', padding: '12px 8px', margin: '0 -8px', borderRadius: '8px' }}>
+                  <button type="button" className="cat-list-item" onClick={() => onToggleCategory(isExpanded ? null : cat.key)} aria-expanded={isExpanded} style={{ padding: '12px 8px', margin: '0 -8px', borderRadius: '8px' }}>
                     <div className="cat-dot" style={{ backgroundColor: cat.color }} />
                     <div className="cat-icon-label" style={{ maxWidth: 'calc(100% - 150px)' }}>
                       <span className="cat-icon">{CATEGORY_MAP[cat.key].icon}</span>
@@ -126,7 +126,7 @@ const HomeView = ({
                       )}
                     </div>
                     <div className="cat-pct">{pct}%</div>
-                  </div>
+                  </button>
                   {isExpanded && catTxs.length > 0 && (
                     <div className="cat-tx-list">
                       {catTxs.map(tx => (
@@ -151,4 +151,3 @@ const HomeView = ({
 );
 
 export default HomeView;
-

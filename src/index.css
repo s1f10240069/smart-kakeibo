@@ -28,6 +28,11 @@
 /* ===== リセット ===== */
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+/* タッチ端末でクリック生成を待たず、1回のタップを即座に操作として扱う。 */
+button, label, select, input, [role="button"], .nav-item, .cat-list-item {
+  touch-action: manipulation;
+}
+
 body {
   font-family: 'Inter', 'Noto Sans JP', -apple-system, sans-serif;
   background-color: var(--bg-color);
@@ -132,6 +137,8 @@ body {
 .cat-accordion-group:last-child { border-bottom: none; }
 .cat-list-item {
   display: flex; align-items: center; padding: 12px 0;
+  width: 100%; border: none; background: transparent; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
   transition: background 0.15s;
 }
 .cat-list-item:hover { background: rgba(0,0,0,0.02); }
@@ -228,9 +235,24 @@ body {
   background: var(--surface-color); border-top: 1px solid var(--border-color);
   justify-content: space-around; padding-bottom: var(--safe-area-bottom); z-index: 30;
 }
-.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-secondary); cursor: pointer; gap: 4px; transition: color 0.2s; }
+.nav-item { flex: 1; min-width: 0; border: none; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-secondary); cursor: pointer; gap: 4px; transition: color 0.2s; font: inherit; }
+.nav-item:disabled { opacity: 0.4; cursor: default; }
 .nav-item.active { color: var(--primary-color); }
 .nav-label { font-size: 10px; font-weight: 700; }
+
+.icon-tap-btn {
+  width: 40px; height: 40px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 10px; background: transparent;
+  color: var(--text-secondary); cursor: pointer;
+}
+
+/* タッチ端末ではhoverを残さず、最初のタップがhoverだけに消費されるのを防ぐ。 */
+@media (hover: none), (pointer: coarse) {
+  .month-btn:hover:not(:disabled) { background: none; color: var(--text-primary); }
+  .cat-list-item:hover { background: transparent; }
+  .google-login-btn:hover { transform: none; box-shadow: none; }
+}
 
 /* ===== 設定 ===== */
 .settings-title    { font-size: 24px; font-weight: 800; margin-bottom: 24px; }

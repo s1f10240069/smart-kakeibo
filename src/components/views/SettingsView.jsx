@@ -1,9 +1,9 @@
-import { Sparkles, Key, Eye, EyeOff, Upload, Download, X, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Sparkles, Key, Eye, EyeOff, RefreshCw, X, ChevronUp, ChevronDown, ShieldAlert } from 'lucide-react';
 import { DEFAULT_PARSE_LABELS } from '../../gmailSync';
 
 const SettingsView = ({ ai, google, gmail, onClearData }) => {
   const { geminiKey, onGeminiKeyChange, showKey, onToggleShowKey, othersCount, aiProgress, aiAllMonthsLoading, onRunAiAllMonths } = ai;
-  const { googleUser, onLogout, onUpload, onDownload, onLogin, syncStatus } = google;
+  const { googleUser, onLogout, onSync, onLogin, syncStatus, syncPhase } = google;
   const { senderInput, setSenderInput, onAddSender, senders, onRemoveSender, labelInputs, setLabelInputs, onAddParseLabel, parseLabels, onRemoveParseLabel, onRunSync, syncStatus: gmailSyncStatus, needsReview, expandedReviewId, setExpandedReviewId, onRetryReview } = gmail;
 
   return (
@@ -20,9 +20,9 @@ const SettingsView = ({ ai, google, gmail, onClearData }) => {
             <input type={showKey ? 'text' : 'password'} placeholder="AIzaSy..." value={geminiKey}
               onChange={e => onGeminiKeyChange(e.target.value)}
               style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: '16px', color: 'var(--text-primary)' }} />
-            <div onClick={onToggleShowKey} style={{ padding: '0 5px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <button type="button" onClick={onToggleShowKey} aria-label={showKey ? 'APIキーを隠す' : 'APIキーを表示'} className="icon-tap-btn">
               {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
-            </div>
+            </button>
           </div>
           {/* 全月一括AI */}
           <div style={{ padding: '16px', background: 'rgba(99,102,241,0.05)', borderRadius: '14px', border: '1px solid rgba(99,102,241,0.2)' }}>
@@ -66,17 +66,14 @@ const SettingsView = ({ ai, google, gmail, onClearData }) => {
                 <button onClick={onLogout} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}>ログアウト</button>
               </div>
 
-              {/* クラウド同期（自動で常時同期されるため、この2つのボタンは万一のための手動バックアップ・復元用） */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={onUpload} style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
-                  <Upload size={16} /> クラウドへ保存
-                </button>
-                <button
-                  onClick={() => { if (window.confirm('端末のデータをクラウドの内容で上書きします。よろしいですか？')) onDownload(); }}
-                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '12px', borderRadius: '10px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
-                  <Download size={16} /> クラウドから復元
-                </button>
-              </div>
+              {/* 通常は自動同期。必要なときだけ同じ双方向同期を手動実行する。 */}
+              <button
+                onClick={onSync}
+                disabled={syncPhase === 'syncing'}
+                style={{ width: '100%', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '7px', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: syncPhase === 'syncing' ? 'not-allowed' : 'pointer', opacity: syncPhase === 'syncing' ? 0.65 : 1 }}>
+                <RefreshCw size={16} className={syncPhase === 'syncing' ? 'animate-spin' : ''} />
+                {syncPhase === 'syncing' ? '同期中...' : '今すぐ同期'}
+              </button>
 
               {/* メール自動取込 */}
               <div style={{ padding: '16px', background: 'rgba(99,102,241,0.05)', borderRadius: '14px', border: '1px solid rgba(99,102,241,0.2)' }}>
@@ -204,7 +201,5 @@ const SettingsView = ({ ai, google, gmail, onClearData }) => {
 };
 
 export default SettingsView;
-
-
 
 

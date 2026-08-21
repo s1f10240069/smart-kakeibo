@@ -180,10 +180,10 @@ export default function App() {
               google={{
                 googleUser: google.googleUser,
                 onLogout: google.handleGoogleLogout,
-                onUpload: () => google.uploadToCloud(),
-                onDownload: () => google.downloadFromCloud(),
+                onSync: () => google.autoSyncCloud(),
                 onLogin: google.handleGoogleLogin,
                 syncStatus: google.syncStatus,
+                syncPhase: google.syncPhase,
               }}
               gmail={{
                 senderInput: gmail.senderInput,
@@ -252,11 +252,12 @@ export default function App() {
           { id: 'list', icon: <List size={22} />, label: '明細', disabled: allTransactions.length === 0 },
           { id: 'settings', icon: <Settings size={22} />, label: '設定', disabled: false },
         ].map(({ id, icon, label, disabled }) => (
-          <div key={id} className={`nav-item ${view === id ? 'active' : ''}`}
-            onClick={() => !disabled && setView(id)}
-            style={{ opacity: disabled ? 0.4 : 1 }}>
+          <button key={id} type="button" className={`nav-item ${view === id ? 'active' : ''}`}
+            onClick={() => setView(id)}
+            disabled={disabled}
+            aria-current={view === id ? 'page' : undefined}>
             {icon}<span className="nav-label">{label}</span>
-          </div>
+          </button>
         ))}
       </div>
 
