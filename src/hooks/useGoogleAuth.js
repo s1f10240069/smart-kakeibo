@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { GOOGLE_CLIENT_ID, GOOGLE_SCOPES, DRIVE_FILE_NAME } from '../lib/googleConfig';
-import { getSyncFile } from '../lib/driveSync';
+import { createDriveResponseError, getSyncFile } from '../lib/driveSync';
 
 const AUTO_UPLOAD_DEBOUNCE_MS = 2500;
 const PERIODIC_RESYNC_MS = 5 * 60 * 1000;
@@ -26,6 +26,18 @@ export function useGoogleAuth({
 
   // uploadToCloud/downloadFromCloudが同時に走ってDriveへの書き込みが競合しないようにするロック
   const syncLockRef = useRef(false);
+
+  const showSyncError = (err, action) => {
+    const needsLogin = err?.status === 401 || err?.status === 403;
+    const isNetworkError = err instanceof TypeError;
+    const message = isNetworkError
+      ? '通信できませんでした。ネット接続を確認して、もう一度お試しください。'
+      : (err?.message || '不明なエラーが発生しました。');
+
+    setSyncStatus(`❌ ${action}エラー: ${message}`);
+    setSyncPhase(needsLogin ? 'needsLogin' : 'error');
+    if (needsLogin) setReLoginNeeded(true);
+  };
 
   const uploadToCloud = async (tokenArg) => {
     const token = tokenArg || googleToken;
@@ -56,10 +68,10 @@ export function useGoogleAuth({
           body,
         });
       }
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `失敗(${res.status})`); }
+      if (!res.ok) throw createDriveResponseError(res, 'クラウドへの保存');
       setSyncStatus('✅ データをGoogle Driveに保存しました');
       setSyncPhase('synced');
-    } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); setSyncPhase('error'); }
+    } catch(err) { showSyncError(err, '保存'); }
     finally { syncLockRef.current = false; }
   };
 
@@ -75,17 +87,36 @@ export function useGoogleAuth({
       const existing = existingArg || await getSyncFile(token);
       if (!existing) { setSyncStatus('❌ クラウドにデータが見つかりません。'); setSyncPhase('error'); return; }
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error(`ダウンロード失敗 (${res.status})`);
-      const obj = await res.json();
-      if (obj.transactions) { setAllTransactions(obj.transactions); localStorage.setItem('kakeibo_data', JSON.stringify(obj.transactions)); }
-      if (obj.rules) { setCustomRules(obj.rules); localStorage.setItem('kakeibo_rules', JSON.stringify(obj.rules)); }
-      if (obj.needsReview) { setNeedsReview(obj.needsReview); }
+      if (!res.ok) throw createDriveResponseError(res, 'クラウドからの読み込み');
+
+      const raw = await res.text();
+      let obj;
+      try {
+        obj = JSON.parse(raw);
+      } catch {
+        throw new Error('クラウドの保存データが壊れているため読み込めません。端末のデータは変更していません。');
+      }
+      const hasValidRules = obj?.rules === undefined
+        || (obj.rules !== null && typeof obj.rules === 'object' && !Array.isArray(obj.rules));
+      const hasValidReview = obj?.needsReview === undefined || Array.isArray(obj.needsReview);
+      if (!obj || !Array.isArray(obj.transactions) || !hasValidRules || !hasValidReview) {
+        throw new Error('クラウドの保存データの形式が正しくありません。端末のデータは変更していません。');
+      }
+
+      // 全項目の検証後にだけ端末データを更新し、途中まで上書きされた状態を防ぐ。
+      const restoredRules = obj.rules ?? {};
+      const restoredReview = obj.needsReview ?? [];
+      setAllTransactions(obj.transactions);
+      localStorage.setItem('kakeibo_data', JSON.stringify(obj.transactions));
+      setCustomRules(restoredRules);
+      localStorage.setItem('kakeibo_rules', JSON.stringify(restoredRules));
+      setNeedsReview(restoredReview);
       // ダウンロード直後はローカル=クラウドの状態なので、クラウドの更新時刻に揃えておく
       // （Date.now()にすると「ローカルの方が新しい」と誤判定して次回すぐ再アップロードしてしまう）
       localStorage.setItem('kakeibo_local_modified', String(new Date(existing.modifiedTime).getTime()));
       setSyncStatus('✅ データを復元・同期しました！');
       setSyncPhase('synced');
-    } catch(err) { setSyncStatus(`❌ エラー: ${err.message}`); setSyncPhase('error'); }
+    } catch(err) { showSyncError(err, '復元'); }
     finally { syncLockRef.current = false; }
   };
   // ログイン時・アプリ起動時・定期同期時に呼ばれる自動同期。クラウドとローカルの更新時刻を比較し、
@@ -106,7 +137,7 @@ export function useGoogleAuth({
         setSyncStatus('✅ 最新の状態です');
         setSyncPhase('synced');
       }
-    } catch(err) { setSyncStatus(`❌ 同期エラー: ${err.message}`); setSyncPhase('error'); }
+    } catch(err) { showSyncError(err, '同期'); }
   };
 
   const onGoogleTokenReceived = async (token, expiresIn) => {
