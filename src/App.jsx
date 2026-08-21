@@ -37,13 +37,23 @@ export default function App() {
 
   const gmail = useGmailSync({ setAllTransactions, touchLocalModified });
 
+  const ai = useAi({
+    allTransactions, customRules, filteredTx, applyAiResults, touchLocalModified,
+  });
+
   const google = useGoogleAuth({
     allTransactions, customRules, setAllTransactions, setCustomRules,
     needsReview: gmail.needsReview, setNeedsReview: gmail.saveNeedsReview,
     runGmailSync: gmail.runGmailSync, localModifiedTick,
+    cloudSettings: {
+      geminiApiKey: ai.geminiKey,
+      gmail: { senders: gmail.gmailSenders, parseLabels: gmail.parseLabels },
+    },
+    restoreCloudSettings: (settings) => {
+      if (settings.geminiApiKey !== undefined) ai.restoreGeminiKey(settings.geminiApiKey);
+      if (settings.gmail !== undefined) gmail.restoreGmailSettings(settings.gmail);
+    },
   });
-
-  const ai = useAi({ allTransactions, customRules, filteredTx, applyAiResults });
 
   // ===== 起動時の自動同期＋メールキャッチアップ =====
   useEffect(() => {

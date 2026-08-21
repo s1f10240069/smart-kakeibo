@@ -13,7 +13,7 @@ const SILENT_RETRY_MAX_MS = 5 * 60 * 1000;
 // Google OAuth ログインと Drive (appDataFolder) クラウド同期を管理するフック
 export function useGoogleAuth({
   allTransactions, customRules, setAllTransactions, setCustomRules,
-  needsReview, setNeedsReview, runGmailSync, localModifiedTick,
+  needsReview, setNeedsReview, runGmailSync, localModifiedTick, cloudSettings, restoreCloudSettings,
 }) {
   const [googleUser, setGoogleUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('kakeibo_google_user') || 'null'); } catch { return null; }
@@ -47,7 +47,14 @@ export function useGoogleAuth({
     setSyncPhase('syncing');
     try {
       setSyncStatus('📡 アップロード中...');
-      const exportObj = { transactions: allTransactions, rules: customRules, needsReview, timestamp: new Date().toISOString() };
+      const exportObj = {
+        version: 2,
+        transactions: allTransactions,
+        rules: customRules,
+        needsReview,
+        settings: cloudSettings,
+        timestamp: new Date().toISOString(),
+      };
       const existing = await getSyncFile(token);
       let res;
       if (existing) {
@@ -99,7 +106,31 @@ export function useGoogleAuth({
       const hasValidRules = obj?.rules === undefined
         || (obj.rules !== null && typeof obj.rules === 'object' && !Array.isArray(obj.rules));
       const hasValidReview = obj?.needsReview === undefined || Array.isArray(obj.needsReview);
-      if (!obj || !Array.isArray(obj.transactions) || !hasValidRules || !hasValidReview) {
+      const settings = obj?.settings;
+      const gmailSettings = settings?.gmail;
+      const hasValidSettings = settings === undefined || (
+        settings !== null
+        && typeof settings === 'object'
+        && !Array.isArray(settings)
+        && (settings.geminiApiKey === undefined || typeof settings.geminiApiKey === 'string')
+        && (gmailSettings === undefined || (
+          gmailSettings !== null
+          && typeof gmailSettings === 'object'
+          && !Array.isArray(gmailSettings)
+          && (gmailSettings.senders === undefined || (
+            Array.isArray(gmailSettings.senders) && gmailSettings.senders.every(v => typeof v === 'string')
+          ))
+          && (gmailSettings.parseLabels === undefined || (
+            gmailSettings.parseLabels !== null
+            && typeof gmailSettings.parseLabels === 'object'
+            && ['amount', 'date', 'merchant'].every(key => (
+              Array.isArray(gmailSettings.parseLabels[key])
+              && gmailSettings.parseLabels[key].every(v => typeof v === 'string')
+            ))
+          ))
+        ))
+      );
+      if (!obj || !Array.isArray(obj.transactions) || !hasValidRules || !hasValidReview || !hasValidSettings) {
         throw new Error('クラウドの保存データの形式が正しくありません。端末のデータは変更していません。');
       }
 
@@ -111,6 +142,7 @@ export function useGoogleAuth({
       setCustomRules(restoredRules);
       localStorage.setItem('kakeibo_rules', JSON.stringify(restoredRules));
       setNeedsReview(restoredReview);
+      if (settings !== undefined) restoreCloudSettings(settings);
       // ダウンロード直後はローカル=クラウドの状態なので、クラウドの更新時刻に揃えておく
       // （Date.now()にすると「ローカルの方が新しい」と誤判定して次回すぐ再アップロードしてしまう）
       localStorage.setItem('kakeibo_local_modified', String(new Date(existing.modifiedTime).getTime()));

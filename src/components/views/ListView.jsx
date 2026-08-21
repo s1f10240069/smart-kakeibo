@@ -50,7 +50,7 @@ const ListView = ({ filteredTx, groupedTxs, summary, onUpdateCategory }) => (
     </div>
 
     {/* モバイル: グループリスト */}
-    <div className="mobile-only">
+    <div className="mobile-only tx-mobile-list">
       {groupedTxs.length > 0 ? groupedTxs.map(group => (
         <div key={group.date}>
           <div className="tx-group-date">{group.date}</div>

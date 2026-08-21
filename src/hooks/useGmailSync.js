@@ -25,6 +25,7 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
     const next = [...gmailSenders, v];
     setGmailSenders(next);
     localStorage.setItem('kakeibo_gmail_senders', JSON.stringify(next));
+    touchLocalModified();
     setSenderInput('');
   };
 
@@ -32,6 +33,7 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
     const next = gmailSenders.filter(s => s !== value);
     setGmailSenders(next);
     localStorage.setItem('kakeibo_gmail_senders', JSON.stringify(next));
+    touchLocalModified();
   };
 
   const addParseLabel = (category) => {
@@ -40,6 +42,7 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
     const next = { ...parseLabels, [category]: [...parseLabels[category], v] };
     setParseLabels(next);
     localStorage.setItem('kakeibo_gmail_labels', JSON.stringify(next));
+    touchLocalModified();
     setLabelInputs({ ...labelInputs, [category]: '' });
   };
 
@@ -47,6 +50,19 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
     const next = { ...parseLabels, [category]: parseLabels[category].filter(v => v !== value) };
     setParseLabels(next);
     localStorage.setItem('kakeibo_gmail_labels', JSON.stringify(next));
+    touchLocalModified();
+  };
+
+  // クラウド復元では変更通知を発生させず、復元した更新時刻をそのまま維持する。
+  const restoreGmailSettings = (settings) => {
+    if (settings.senders !== undefined) {
+      setGmailSenders(settings.senders);
+      localStorage.setItem('kakeibo_gmail_senders', JSON.stringify(settings.senders));
+    }
+    if (settings.parseLabels !== undefined) {
+      setParseLabels(settings.parseLabels);
+      localStorage.setItem('kakeibo_gmail_labels', JSON.stringify(settings.parseLabels));
+    }
   };
 
   const saveNeedsReview = (list) => {
@@ -151,7 +167,6 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
     parseLabels, labelInputs, setLabelInputs,
     gmailSyncStatus, needsReview, expandedReviewId, setExpandedReviewId,
     addGmailSender, removeGmailSender, addParseLabel, removeParseLabel,
-    retryParseReview, runGmailSync, saveNeedsReview,
+    retryParseReview, runGmailSync, saveNeedsReview, restoreGmailSettings,
   };
 }
-

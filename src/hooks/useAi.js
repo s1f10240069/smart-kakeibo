@@ -2,13 +2,21 @@ import { useState } from 'react';
 import { callGemini, AI_PROMPT } from '../lib/gemini';
 
 // Gemini APIによるカテゴリ自動仕分けを管理するフック
-export function useAi({ allTransactions, customRules, filteredTx, applyAiResults }) {
+export function useAi({ allTransactions, customRules, filteredTx, applyAiResults, touchLocalModified }) {
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('kakeibo_aikey') || '');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiAllMonthsLoading, setAiAllMonthsLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState('');
 
-  const handleGeminiKeyChange = (v) => { setGeminiKey(v); localStorage.setItem('kakeibo_aikey', v); };
+  const saveGeminiKey = (v) => {
+    setGeminiKey(v);
+    localStorage.setItem('kakeibo_aikey', v);
+  };
+
+  const handleGeminiKeyChange = (v) => {
+    saveGeminiKey(v);
+    touchLocalModified();
+  };
 
   const runAiCategorization = async () => {
     if (!geminiKey) return alert('設定でGeminiのAPIキーを入力してください！');
@@ -53,7 +61,7 @@ export function useAi({ allTransactions, customRules, filteredTx, applyAiResults
   };
 
   return {
-    geminiKey, handleGeminiKeyChange,
+    geminiKey, handleGeminiKeyChange, restoreGeminiKey: saveGeminiKey,
     isAiLoading, aiAllMonthsLoading, aiProgress,
     runAiCategorization, runAiCategorizationAllMonths,
   };
