@@ -279,7 +279,13 @@ export function useGoogleAuth({
   }, [googleToken]);
 
   return {
-    googleUser, syncStatus, syncPhase, reLoginNeeded,
+    googleUser,
+    isAuthenticated: Boolean(
+      googleUser
+      && googleToken
+      && parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10) > Date.now()
+    ),
+    syncStatus, syncPhase, reLoginNeeded,
     handleGoogleLogin, handleGoogleLogout, trySilentGoogleLogin,
     uploadToCloud, downloadFromCloud, autoSyncCloud,
   };

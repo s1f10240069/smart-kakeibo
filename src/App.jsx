@@ -9,6 +9,7 @@ import MonthCalendarModal from './components/MonthCalendarModal';
 import MonthSwitcher from './components/MonthSwitcher';
 import Sidebar from './components/Sidebar';
 import SyncStatusIndicator from './components/SyncStatusIndicator';
+import LoginGate from './components/LoginGate';
 import WelcomeView from './components/views/WelcomeView';
 import HomeView from './components/views/HomeView';
 import ListView from './components/views/ListView';
@@ -74,6 +75,12 @@ export default function App() {
       setView('home');
     }
   };
+
+  // 有効なGoogle認証がない間は家計簿本体へ入れない。
+  // 保存済みセッションがある場合は、起動時useEffectのサイレント認証完了後に自動で解除される。
+  if (!google.isAuthenticated) {
+    return <LoginGate onLogin={google.handleGoogleLogin} status={google.syncStatus} />;
+  }
 
 
   // ===== メインレンダー =====
