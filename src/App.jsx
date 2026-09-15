@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Home, List, Settings } from 'lucide-react';
+import { Plus, Home, List, Settings, RefreshCw } from 'lucide-react';
 import { formatCurrency } from './lib/categories';
 import { useTransactions } from './hooks/useTransactions';
 import { useAi } from './hooks/useAi';
@@ -100,6 +100,8 @@ export default function App() {
     return <LoginGate onLogin={google.handleGoogleLogin} status={google.syncStatus} />;
   }
 
+  const isCheckingLatest = google.syncPhase === 'checking' || google.syncPhase === 'syncing';
+
 
   // ===== メインレンダー =====
   return (
@@ -129,6 +131,19 @@ export default function App() {
         <div className="app-header mobile-only">
           <div className="app-title">スマート明細</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {(view === 'home' || view === 'list') && (
+              <button
+                type="button"
+                className="latest-check-btn latest-check-btn-mobile"
+                onClick={() => google.ensureLatest()}
+                disabled={isCheckingLatest}
+                aria-label="最新の明細か確認"
+                title="最新の明細か確認"
+              >
+                <RefreshCw size={15} className={isCheckingLatest ? 'animate-spin' : ''} />
+                <span>最新確認</span>
+              </button>
+            )}
             {google.googleUser && (
               <SyncStatusIndicator
                 syncPhase={google.syncPhase}
@@ -153,10 +168,21 @@ export default function App() {
             )}
           </div>
           {(view === 'home' || view === 'list') && (
-            <label className="desktop-upload-btn">
-              <Plus size={16} />CSVを追加
-              <input type="file" accept=".csv" multiple onChange={handleFileUpload} style={{ display: 'none' }} />
-            </label>
+            <div className="desktop-topbar-actions">
+              <button
+                type="button"
+                className="latest-check-btn"
+                onClick={() => google.ensureLatest()}
+                disabled={isCheckingLatest}
+              >
+                <RefreshCw size={16} className={isCheckingLatest ? 'animate-spin' : ''} />
+                {isCheckingLatest ? '確認中...' : '最新明細を確認'}
+              </button>
+              <label className="desktop-upload-btn">
+                <Plus size={16} />CSVを追加
+                <input type="file" accept=".csv" multiple onChange={handleFileUpload} style={{ display: 'none' }} />
+              </label>
+            </div>
           )}
         </div>
 

@@ -72,6 +72,15 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 .app-title { font-size: 20px; font-weight: 800; color: var(--primary-color); }
+.latest-check-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 14px; border: 1px solid rgba(99,102,241,0.35); border-radius: 10px;
+  background: rgba(99,102,241,0.08); color: var(--primary-color);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.latest-check-btn:hover:not(:disabled) { background: rgba(99,102,241,0.15); }
+.latest-check-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.latest-check-btn-mobile { padding: 7px 9px; font-size: 11px; white-space: nowrap; }
 
 /* ===== 月切り替え (モバイル) ===== */
 .month-switcher {
@@ -502,6 +511,7 @@ body {
   .desktop-topbar-left {}
   .desktop-topbar-title { font-size: 20px; font-weight: 800; color: var(--text-primary); }
   .desktop-topbar-sub   { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+  .desktop-topbar-actions { display: flex; align-items: center; gap: 10px; }
   .desktop-upload-btn {
     display: flex;
     align-items: center;

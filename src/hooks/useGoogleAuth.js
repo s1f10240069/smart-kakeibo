@@ -46,8 +46,8 @@ export function useGoogleAuth({
 
   const uploadToCloud = async (tokenArg, dataArg, existingArg) => {
     const token = tokenArg || googleToken;
-    if (!token) return alert('Googleでログインしてください');
-    if (syncLockRef.current) { setSyncStatus('⏳ 別の同期処理が進行中です。少し待って再試行してください'); return; }
+    if (!token) { alert('Googleでログインしてください'); return false; }
+    if (syncLockRef.current) { setSyncStatus('⏳ 別の同期処理が進行中です。少し待って再試行してください'); return false; }
     syncLockRef.current = true;
     setSyncPhase('syncing');
     const uploadedLocalModified = localStorage.getItem('kakeibo_local_modified');
@@ -93,21 +93,22 @@ export function useGoogleAuth({
       }
       setSyncStatus('✅ データをGoogle Driveに保存しました');
       setSyncPhase('synced');
-    } catch(err) { showSyncError(err, '保存'); }
+      return true;
+    } catch(err) { showSyncError(err, '保存'); return false; }
     finally { syncLockRef.current = false; }
   };
 
   // existingを渡すとファイル検索を再実行せずに済む（自動同期からの呼び出し用）
   const downloadFromCloud = async (tokenArg, existingArg) => {
     const token = tokenArg || googleToken;
-    if (!token) return alert('Googleでログインしてください');
-    if (syncLockRef.current) { setSyncStatus('⏳ 別の同期処理が進行中です。少し待って再試行してください'); return; }
+    if (!token) { alert('Googleでログインしてください'); return false; }
+    if (syncLockRef.current) { setSyncStatus('⏳ 別の同期処理が進行中です。少し待って再試行してください'); return false; }
     syncLockRef.current = true;
     setSyncPhase('syncing');
     try {
       setSyncStatus('📡 読み込み中...');
       const existing = existingArg || await getSyncFile(token);
-      if (!existing) { setSyncStatus('❌ クラウドにデータが見つかりません。'); setSyncPhase('error'); return; }
+      if (!existing) { setSyncStatus('❌ クラウドにデータが見つかりません。'); setSyncPhase('error'); return false; }
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw createDriveResponseError(res, 'クラウドからの読み込み');
 
@@ -165,19 +166,20 @@ export function useGoogleAuth({
       localStorage.setItem(LAST_SYNCED_CLOUD_MODIFIED_KEY, String(new Date(existing.modifiedTime).getTime()));
       setSyncStatus('✅ データを復元・同期しました！');
       setSyncPhase('synced');
-    } catch(err) { showSyncError(err, '復元'); }
+      return true;
+    } catch(err) { showSyncError(err, '復元'); return false; }
     finally { syncLockRef.current = false; }
   };
   // ログイン時・アプリ起動時・定期同期時に呼ばれる自動同期。クラウドとローカルの更新時刻を比較し、
   // 新しい方に揃える（古いクラウドデータでローカルの新しい変更を上書きしないため）。
   const autoSyncCloud = async (tokenArg) => {
     const token = tokenArg || googleToken;
-    if (!token) return;
+    if (!token) return false;
     try {
       setSyncPhase('checking');
       setSyncStatus('🔎 最新のデータを確認中...');
       const existing = await getSyncFile(token);
-      if (!existing) { await uploadToCloud(token); return; }
+      if (!existing) return await uploadToCloud(token);
       const cloudModified = new Date(existing.modifiedTime).getTime();
       const localModified = parseInt(localStorage.getItem('kakeibo_local_modified') || '0', 10);
       const lastSyncedCloudModified = parseInt(localStorage.getItem(LAST_SYNCED_CLOUD_MODIFIED_KEY) || '0', 10);
@@ -207,38 +209,39 @@ export function useGoogleAuth({
         localStorage.setItem('kakeibo_rules', JSON.stringify(merged.rules));
         setNeedsReview(merged.needsReview);
         if (merged.settings) restoreCloudSettings(merged.settings);
-        await uploadToCloud(token, merged, existing);
+        return await uploadToCloud(token, merged, existing);
       };
 
       // 新しい同期方式へ移行する初回は共通の同期点が分からないため、
       // 時刻だけで片方を捨てずに両方の明細を統合する。
       if (!lastSyncedCloudModified) {
         if (!localModified || allTransactions.length === 0) {
-          await downloadFromCloud(token, existing);
+          return await downloadFromCloud(token, existing);
         } else if (Math.abs(cloudModified - localModified) <= 1000) {
           localStorage.setItem(LAST_SYNCED_CLOUD_MODIFIED_KEY, String(cloudModified));
           setSyncStatus('✅ 最新の状態です');
           setSyncPhase('synced');
+          return true;
         } else {
-          await mergeAndUpload();
+          return await mergeAndUpload();
         }
-        return;
       }
 
       const cloudChanged = cloudModified > lastSyncedCloudModified + 1000;
       const localChanged = localModified > lastSyncedCloudModified + 1000;
       if (cloudChanged && localChanged) {
-        await mergeAndUpload();
+        return await mergeAndUpload();
       } else if (cloudChanged) {
-        await downloadFromCloud(token, existing);
+        return await downloadFromCloud(token, existing);
       } else if (localChanged) {
-        await uploadToCloud(token, undefined, existing);
+        return await uploadToCloud(token, undefined, existing);
       } else {
         localStorage.setItem(LAST_SYNCED_CLOUD_MODIFIED_KEY, String(cloudModified));
         setSyncStatus('✅ 最新の状態です');
         setSyncPhase('synced');
+        return true;
       }
-    } catch(err) { showSyncError(err, '同期'); }
+    } catch(err) { showSyncError(err, '同期'); return false; }
   };
 
   // 起動・画面復帰・画面遷移から同時に呼ばれても、最新確認は常に1本だけ実行する。
@@ -250,13 +253,14 @@ export function useGoogleAuth({
     if (!token) return Promise.resolve();
 
     const task = (async () => {
-      await autoSyncCloud(token);
+      const cloudOk = await autoSyncCloud(token);
+      if (!cloudOk) return { ok: false };
       setSyncPhase('checking');
       setSyncStatus('🔎 Gmailの新着明細を確認中...');
       const gmailResult = await runGmailSync(token);
       if (gmailResult?.error) {
         showSyncError(gmailResult.error, 'Gmail確認');
-        return;
+        return { ok: false };
       }
       if (gmailResult?.changed) {
         const snapshot = {
@@ -273,10 +277,12 @@ export function useGoogleAuth({
           },
           timestamp: new Date().toISOString(),
         };
-        await uploadToCloud(token, snapshot);
+        const uploadOk = await uploadToCloud(token, snapshot);
+        return { ok: uploadOk, changed: true };
       } else {
         setSyncStatus('✅ 最新の状態です');
         setSyncPhase('synced');
+        return { ok: true, changed: false };
       }
     })().catch(err => showSyncError(err, '最新確認'));
     latestCheckPromiseRef.current = task;
