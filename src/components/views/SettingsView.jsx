@@ -69,10 +69,10 @@ const SettingsView = ({ ai, google, gmail, onClearData }) => {
               {/* 通常は自動同期。必要なときだけ同じ双方向同期を手動実行する。 */}
               <button
                 onClick={onSync}
-                disabled={syncPhase === 'syncing'}
-                style={{ width: '100%', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '7px', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: syncPhase === 'syncing' ? 'not-allowed' : 'pointer', opacity: syncPhase === 'syncing' ? 0.65 : 1 }}>
-                <RefreshCw size={16} className={syncPhase === 'syncing' ? 'animate-spin' : ''} />
-                {syncPhase === 'syncing' ? '同期中...' : '今すぐ同期'}
+                disabled={syncPhase === 'syncing' || syncPhase === 'checking'}
+                style={{ width: '100%', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '7px', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: syncPhase === 'syncing' || syncPhase === 'checking' ? 'not-allowed' : 'pointer', opacity: syncPhase === 'syncing' || syncPhase === 'checking' ? 0.65 : 1 }}>
+                <RefreshCw size={16} className={syncPhase === 'syncing' || syncPhase === 'checking' ? 'animate-spin' : ''} />
+                {syncPhase === 'checking' ? '最新を確認中...' : syncPhase === 'syncing' ? '同期中...' : '今すぐ同期'}
               </button>
 
               {/* メール自動取込 */}
@@ -201,5 +201,4 @@ const SettingsView = ({ ai, google, gmail, onClearData }) => {
 };
 
 export default SettingsView;
-
 

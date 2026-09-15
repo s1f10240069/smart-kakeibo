@@ -108,9 +108,12 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
       const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
       token = (t && exp > Date.now()) ? t : '';
     }
-    if (!token) return;
+    if (!token) return { changed: false };
     const senders = JSON.parse(localStorage.getItem('kakeibo_gmail_senders') || '[]');
-    if (senders.length === 0) { setGmailSyncStatus('設定で送信元メールアドレスを追加してください'); return; }
+    if (senders.length === 0) {
+      setGmailSyncStatus('設定で送信元メールアドレスを追加してください');
+      return { changed: false };
+    }
     try {
       const labels = JSON.parse(localStorage.getItem('kakeibo_gmail_labels') || 'null') || DEFAULT_PARSE_LABELS;
       const rules = JSON.parse(localStorage.getItem('kakeibo_rules') || '{}');
@@ -155,11 +158,16 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
 
       setAllTransactions(db);
       localStorage.setItem('kakeibo_data', JSON.stringify(db));
-      if (resolvedCount > 0 || pending.length !== initialPendingCount) touchLocalModified();
+      const changed = resolvedCount > 0 || newIds.length > 0 || pending.length !== initialPendingCount;
+      if (changed) touchLocalModified();
       saveNeedsReview(pending);
       localStorage.setItem('kakeibo_gmail_last_sync', new Date().toISOString());
       setGmailSyncStatus(`✅ ${resolvedCount}件の明細を取り込みました${pending.length ? `（${pending.length}件は要確認のまま）` : ''}`);
-    } catch(err) { setGmailSyncStatus(`❌ エラー: ${err.message}`); }
+      return { changed, resolvedCount };
+    } catch(err) {
+      setGmailSyncStatus(`❌ エラー: ${err.message}`);
+      return { changed: false, error: err };
+    }
   };
 
   return {

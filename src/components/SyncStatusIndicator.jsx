@@ -2,6 +2,7 @@ import { RefreshCw, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-reac
 
 const PHASE_CONFIG = {
   idle: { icon: null, label: '', color: 'var(--text-secondary)' },
+  checking: { icon: RefreshCw, spin: true, label: '最新を確認中...', color: 'var(--primary-color)' },
   syncing: { icon: RefreshCw, spin: true, label: '同期中...', color: 'var(--primary-color)' },
   synced: { icon: CheckCircle2, label: '同期済み', color: '#10b981' },
   error: { icon: AlertCircle, label: '同期エラー', color: 'var(--danger-color, #ef4444)' },

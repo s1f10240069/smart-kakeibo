@@ -62,13 +62,21 @@ export default function App() {
       const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
       const u = localStorage.getItem('kakeibo_google_user');
       if (t && exp > Date.now()) {
-        google.autoSyncCloud(t).then(() => gmail.runGmailSync(t));
+        google.ensureLatest(t);
       } else if (u) {
         google.trySilentGoogleLogin();
       }
     } catch(e) { console.error(e); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ホーム・明細を表示するたびにDriveの更新時刻を確認する。
+  // 同時呼び出しはuseGoogleAuth側で1本にまとめられる。
+  useEffect(() => {
+    if (view !== 'home' && view !== 'list') return;
+    google.ensureLatest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   // ===== ホーム遷移を伴う合成ハンドラー =====
   const handleFileUpload = async (e) => { await handleFileUploadRaw(e); setView('home'); };
@@ -180,7 +188,7 @@ export default function App() {
               google={{
                 googleUser: google.googleUser,
                 onLogout: google.handleGoogleLogout,
-                onSync: () => google.autoSyncCloud(),
+                onSync: () => google.ensureLatest(),
                 onLogin: google.handleGoogleLogin,
                 syncStatus: google.syncStatus,
                 syncPhase: google.syncPhase,
