@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import { categorize } from './categories';
+import { normalizeTransactionDate } from './dates';
 
 export const parseOneFile = (csvText, currentDB, rulesSnap) => new Promise(resolve => {
   Papa.parse(csvText, { skipEmptyLines: true, complete: (results) => {
@@ -8,7 +9,7 @@ export const parseOneFile = (csvText, currentDB, rulesSnap) => new Promise(resol
       if (row[0] === '2' || (row.length >= 5 && !isNaN(parseFloat(row[4])))) {
         rawTxs.push({
           id: Math.random().toString(36).substr(2, 9),
-          date:   row[1] ? row[1].trim() : '不明な日付',
+          date:   row[1] ? normalizeTransactionDate(row[1]) : '不明な日付',
           desc:   row[2] ? row[2].trim() : '不明な取引',
           amount: parseFloat(row[4]) || 0,
           catKey: categorize(row[2] ? row[2].trim() : '', rulesSnap)

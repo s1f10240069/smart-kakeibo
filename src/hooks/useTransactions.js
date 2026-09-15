@@ -1,12 +1,21 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { CATEGORY_MAP } from '../lib/categories';
 import { parseOneFile, readFileAsText } from '../lib/csv';
 import { applyAiResultsToData } from '../lib/gemini';
+import { getTransactionMonth, normalizeTransactions } from '../lib/dates';
 
 // 取引データ・カスタムルール・派生値・CRUDを一元管理するフック
 export function useTransactions() {
   const [allTransactions, setAllTransactions] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('kakeibo_data') || '[]'); } catch { return []; }
+    try {
+      const stored = JSON.parse(localStorage.getItem('kakeibo_data') || '[]');
+      const normalized = normalizeTransactions(stored);
+      if (normalized.some((transaction, index) => transaction !== stored[index])) {
+        localStorage.setItem('kakeibo_data', JSON.stringify(normalized));
+        localStorage.setItem('kakeibo_local_modified', String(Date.now()));
+      }
+      return normalized;
+    } catch { return []; }
   });
   const [customRules, setCustomRules] = useState(() => {
     try { return JSON.parse(localStorage.getItem('kakeibo_rules') || '{}'); } catch { return {}; }
@@ -17,25 +26,34 @@ export function useTransactions() {
   const availableMonths = useMemo(() => {
     const s = new Set();
     allTransactions.forEach(t => {
-      const p = t.date.split('/');
-      if (p.length >= 2) s.add(`${p[0]}/${p[1]}`);
-      else s.add('不明な日付');
+      s.add(getTransactionMonth(t.date) || '不明な日付');
     });
-    return Array.from(s).sort().reverse();
+    return Array.from(s).sort((a, b) => {
+      if (a === '不明な日付') return 1;
+      if (b === '不明な日付') return -1;
+      return b.localeCompare(a);
+    });
   }, [allTransactions]);
 
-  // 表示月が未設定 or 無効になった場合は最新月に自動補正（レンダー中に調整する）
-  if (!targetMonth && availableMonths.length > 0) {
-    setTargetMonth(availableMonths[0]);
-  } else if (targetMonth && !availableMonths.includes(targetMonth) && availableMonths.length > 0) {
-    setTargetMonth(availableMonths[0]);
-  }
+  // 同期によって新しい月が追加されたとき、もともと最新月を見ていた場合は新しい最新月へ進める。
+  // 過去月を明示的に見ている場合は、その選択を維持する。
+  const previousLatestMonthRef = useRef('');
+  useEffect(() => {
+    const latestMonth = availableMonths[0] || '';
+    setTargetMonth(current => {
+      if (!latestMonth) return '';
+      if (!current || !availableMonths.includes(current)) return latestMonth;
+      if (previousLatestMonthRef.current && current === previousLatestMonthRef.current) return latestMonth;
+      return current;
+    });
+    previousLatestMonthRef.current = latestMonth;
+  }, [availableMonths]);
 
   const monthTotals = useMemo(() => {
     const totals = {};
     allTransactions.forEach(t => {
-      const p = t.date.split('/');
-      if (p.length >= 2) { const m = `${p[0]}/${p[1]}`; totals[m] = (totals[m] || 0) + t.amount; }
+      const month = getTransactionMonth(t.date);
+      if (month) totals[month] = (totals[month] || 0) + t.amount;
     });
     return totals;
   }, [allTransactions]);
@@ -44,7 +62,7 @@ export function useTransactions() {
     let filtered = allTransactions;
     if (targetMonth) {
       filtered = allTransactions.filter(t =>
-        t.date.startsWith(targetMonth) || (targetMonth === '不明な日付' && !t.date.includes('/'))
+        getTransactionMonth(t.date) === targetMonth || (targetMonth === '不明な日付' && !getTransactionMonth(t.date))
       );
     }
     filtered = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -71,7 +89,7 @@ export function useTransactions() {
     const idx = availableMonths.indexOf(targetMonth);
     if (idx === -1 || idx >= availableMonths.length - 1) return null;
     const prevMonth = availableMonths[idx + 1];
-    const prevTx = allTransactions.filter(t => t.date.startsWith(prevMonth));
+    const prevTx = allTransactions.filter(t => getTransactionMonth(t.date) === prevMonth);
     let total = 0; const catTotals = {};
     prevTx.forEach(tx => { total += tx.amount; catTotals[tx.catKey] = (catTotals[tx.catKey] || 0) + tx.amount; });
     return { month: prevMonth, total, catTotals };
@@ -79,7 +97,7 @@ export function useTransactions() {
 
   const allMonthsSummary = useMemo(() =>
     availableMonths.slice().reverse().map(m => {
-      const total = allTransactions.filter(t => t.date.startsWith(m)).reduce((s, t) => s + t.amount, 0);
+      const total = allTransactions.filter(t => getTransactionMonth(t.date) === m).reduce((s, t) => s + t.amount, 0);
       const label = m.replace(/^20(\d{2})\/0?(\d+)$/, `'$1/$2`);
       return { month: m, label, total };
     }), [allTransactions, availableMonths]);
@@ -149,4 +167,3 @@ export function useTransactions() {
     changeMonth, handleFileUpload, updateCategory, applyAiResults,
   };
 }
-

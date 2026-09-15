@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GOOGLE_CLIENT_ID, GOOGLE_SCOPES, DRIVE_FILE_NAME } from '../lib/googleConfig';
 import { createDriveResponseError, getSyncFile } from '../lib/driveSync';
 import { LAST_SYNCED_CLOUD_MODIFIED_KEY, mergeCloudData } from '../lib/cloudSync';
+import { normalizeTransactions } from '../lib/dates';
 
 const AUTO_UPLOAD_DEBOUNCE_MS = 2500;
 const PERIODIC_RESYNC_MS = 5 * 60 * 1000;
@@ -151,8 +152,9 @@ export function useGoogleAuth({
       // 全項目の検証後にだけ端末データを更新し、途中まで上書きされた状態を防ぐ。
       const restoredRules = obj.rules ?? {};
       const restoredReview = obj.needsReview ?? [];
-      setAllTransactions(obj.transactions);
-      localStorage.setItem('kakeibo_data', JSON.stringify(obj.transactions));
+      const restoredTransactions = normalizeTransactions(obj.transactions);
+      setAllTransactions(restoredTransactions);
+      localStorage.setItem('kakeibo_data', JSON.stringify(restoredTransactions));
       setCustomRules(restoredRules);
       localStorage.setItem('kakeibo_rules', JSON.stringify(restoredRules));
       setNeedsReview(restoredReview);
