@@ -1,6 +1,6 @@
 # Cloudflare Workers版 Google認証セットアップ
 
-この手順では、従来のGitHub Pages版を残したまま、Cloudflare Workers + Static Assets版を別URLで公開します。ログに `Executing user deploy command: npx wrangler versions upload` と出る構成を対象にしています。
+この手順では、従来のGitHub Pages版を残したまま、Cloudflare Workers + Static Assets版を別URLで公開します。
 
 ## 0. 戻し方を確認する
 
@@ -44,7 +44,7 @@ https://www.googleapis.com/auth/gmail.readonly
 3. GitHubアカウントを接続し、このリポジトリを選ぶ。
 4. Production branchに `feat/server-side-google-auth` を指定する。検証完了後に `master` へ変更してもよい。
 5. Build commandを `npm run build` にする。
-6. Deploy commandを `npx wrangler versions upload` にする。Cloudflareが自動入力している場合はそのままでよい。
+6. Deploy commandを `npx wrangler deploy` にする。`npx wrangler versions upload` はバージョンをアップロードするだけで公開トラフィックへ反映しないため使用しない。
 7. プロジェクト名を `smart-kakeibo` にする。別名を使う場合は `wrangler.jsonc` の `name` も同じ名前へ変更する。
 8. Save and Deployを実行する。
 
