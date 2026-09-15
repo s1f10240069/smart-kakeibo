@@ -1,32 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
-import { GOOGLE_CLIENT_ID, GOOGLE_SCOPES, DRIVE_FILE_NAME } from '../lib/googleConfig';
+import { DRIVE_FILE_NAME } from '../lib/googleConfig';
 import { createDriveResponseError, getSyncFile } from '../lib/driveSync';
 import { LAST_SYNCED_CLOUD_MODIFIED_KEY, mergeCloudData } from '../lib/cloudSync';
 import { normalizeTransactions } from '../lib/dates';
+import {
+  clearGoogleSessionCache,
+  getGoogleAccessToken,
+  getGoogleSession,
+  logoutGoogleSession,
+  startGoogleLogin,
+} from '../lib/googleSession';
 
 const AUTO_UPLOAD_DEBOUNCE_MS = 2500;
 const PERIODIC_RESYNC_MS = 5 * 60 * 1000;
 const FOCUS_RESYNC_THROTTLE_MS = 60 * 1000;
-const TOKEN_REFRESH_MARGIN_MS = 10 * 60 * 1000;
-const MAX_SILENT_RETRIES = 4;
-const SILENT_RETRY_BASE_MS = 30 * 1000;
-const SILENT_RETRY_MAX_MS = 5 * 60 * 1000;
 
 // Google OAuth ログインと Drive (appDataFolder) クラウド同期を管理するフック
 export function useGoogleAuth({
   allTransactions, customRules, setAllTransactions, setCustomRules,
   needsReview, setNeedsReview, runGmailSync, localModifiedTick, cloudSettings, restoreCloudSettings,
 }) {
-  const [googleUser, setGoogleUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('kakeibo_google_user') || 'null'); } catch { return null; }
-  });
-  const [googleToken, setGoogleToken] = useState(() => localStorage.getItem('kakeibo_google_token') || '');
-  const [syncStatus, setSyncStatus] = useState('');
+  const [googleUser, setGoogleUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('ログイン状態を確認中...');
   // 'idle' | 'checking' | 'syncing' | 'synced' | 'error' | 'needsLogin'
-  const [syncPhase, setSyncPhase] = useState(() => {
-    const expiry = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
-    return localStorage.getItem('kakeibo_google_token') && expiry > Date.now() ? 'checking' : 'idle';
-  });
+  const [syncPhase, setSyncPhase] = useState('checking');
   const [reLoginNeeded, setReLoginNeeded] = useState(false);
 
   // uploadToCloud/downloadFromCloudが同時に走ってDriveへの書き込みが競合しないようにするロック
@@ -45,7 +43,7 @@ export function useGoogleAuth({
   };
 
   const uploadToCloud = async (tokenArg, dataArg, existingArg) => {
-    const token = tokenArg || googleToken;
+    const token = tokenArg || await getGoogleAccessToken();
     if (!token) { alert('Googleでログインしてください'); return false; }
     if (syncLockRef.current) { setSyncStatus('⏳ 別の同期処理が進行中です。少し待って再試行してください'); return false; }
     syncLockRef.current = true;
@@ -100,7 +98,7 @@ export function useGoogleAuth({
 
   // existingを渡すとファイル検索を再実行せずに済む（自動同期からの呼び出し用）
   const downloadFromCloud = async (tokenArg, existingArg) => {
-    const token = tokenArg || googleToken;
+    const token = tokenArg || await getGoogleAccessToken();
     if (!token) { alert('Googleでログインしてください'); return false; }
     if (syncLockRef.current) { setSyncStatus('⏳ 別の同期処理が進行中です。少し待って再試行してください'); return false; }
     syncLockRef.current = true;
@@ -173,7 +171,7 @@ export function useGoogleAuth({
   // ログイン時・アプリ起動時・定期同期時に呼ばれる自動同期。クラウドとローカルの更新時刻を比較し、
   // 新しい方に揃える（古いクラウドデータでローカルの新しい変更を上書きしないため）。
   const autoSyncCloud = async (tokenArg) => {
-    const token = tokenArg || googleToken;
+    const token = tokenArg || await getGoogleAccessToken();
     if (!token) return false;
     try {
       setSyncPhase('checking');
@@ -249,10 +247,10 @@ export function useGoogleAuth({
   const latestCheckPromiseRef = useRef(null);
   const ensureLatest = (tokenArg) => {
     if (latestCheckPromiseRef.current) return latestCheckPromiseRef.current;
-    const token = tokenArg || googleToken;
-    if (!token) return Promise.resolve();
 
     const task = (async () => {
+      const token = tokenArg || await getGoogleAccessToken();
+      if (!token) return { ok: false };
       const cloudOk = await autoSyncCloud(token);
       if (!cloudOk) return { ok: false };
       setSyncPhase('checking');
@@ -292,82 +290,46 @@ export function useGoogleAuth({
     return task;
   };
 
-  const onGoogleTokenReceived = async (token, expiresIn) => {
-    const expiry = Date.now() + expiresIn * 1000;
-    setGoogleToken(token);
-    localStorage.setItem('kakeibo_google_token', token);
-    localStorage.setItem('kakeibo_google_token_expiry', String(expiry));
-    silentFailureCountRef.current = 0;
-    setReLoginNeeded(false);
-    try {
-      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) {
-        const u = await res.json();
-        const profile = { email: u.email, name: u.name, picture: u.picture };
-        setGoogleUser(profile);
-        localStorage.setItem('kakeibo_google_user', JSON.stringify(profile));
-        setSyncStatus(`✅ ${u.email} としてログインしました！`);
-      }
-    } catch(e) { console.error(e); }
-    await ensureLatest(token);
-  };
-
   const handleGoogleLogin = () => {
-    if (!window.google?.accounts?.oauth2) { setSyncStatus('❌ Google連携を読み込み中です。数秒待って再度お試しください。'); return; }
     setSyncStatus('🔄 Googleに接続中...');
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GOOGLE_SCOPES,
-      callback: (resp) => {
-        if (resp.error) { setSyncStatus(`❌ エラー: ${resp.error}`); return; }
-        onGoogleTokenReceived(resp.access_token, resp.expires_in);
-      },
-    });
-    client.requestAccessToken({ prompt: 'consent' });
+    startGoogleLogin();
   };
 
-  // サイレント再ログインの連続失敗回数。setTimeoutチェーンをまたいで参照するのでrefで保持。
-  const silentFailureCountRef = useRef(0);
-
-  const trySilentGoogleLogin = (attempt = 0) => {
-    if (!window.google?.accounts?.oauth2) {
-      if (attempt > 20) return; // ~6秒待って読み込まれなければ諦める（手動ログインボタンから再試行可能）
-      setTimeout(() => trySilentGoogleLogin(attempt + 1), 300);
-      return;
+  const refreshServerSession = async () => {
+    const session = await getGoogleSession({ force: true });
+    setGoogleUser(session.user);
+    if (session.authenticated) {
+      localStorage.setItem('kakeibo_google_user', JSON.stringify(session.user));
+      setReLoginNeeded(false);
+      return session;
     }
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GOOGLE_SCOPES,
-      callback: (resp) => {
-        if (!resp.error) { onGoogleTokenReceived(resp.access_token, resp.expires_in); return; }
-        silentFailureCountRef.current += 1;
-        if (silentFailureCountRef.current > MAX_SILENT_RETRIES) {
-          // 何度もサイレント再認証に失敗する場合のみユーザーに再ログインを促す
-          // （Cookie制限・同意の取り消し・明示ログアウトなど）
-          setReLoginNeeded(true);
-          setSyncPhase('needsLogin');
-          setSyncStatus('⚠️ 再ログインが必要です');
-          return;
-        }
-        const backoffMs = Math.min(SILENT_RETRY_BASE_MS * 2 ** (silentFailureCountRef.current - 1), SILENT_RETRY_MAX_MS);
-        setTimeout(() => trySilentGoogleLogin(), backoffMs);
-      },
-    });
-    client.requestAccessToken({ prompt: '' });
-  };
-
-  const handleGoogleLogout = () => {
-    if (googleToken && window.google?.accounts?.oauth2?.revoke) {
-      window.google.accounts.oauth2.revoke(googleToken, () => {});
-    }
-    setGoogleUser(null); setGoogleToken('');
     localStorage.removeItem('kakeibo_google_user');
-    localStorage.removeItem('kakeibo_google_token');
-    localStorage.removeItem('kakeibo_google_token_expiry');
-    silentFailureCountRef.current = 0;
-    setReLoginNeeded(false);
-    setSyncPhase('idle');
-    setSyncStatus('ログアウトしました。');
+    return session;
+  };
+
+  const handleGoogleLogout = async () => {
+    try {
+      await logoutGoogleSession();
+      setGoogleUser(null);
+      localStorage.removeItem('kakeibo_google_user');
+      setReLoginNeeded(false);
+      setSyncPhase('idle');
+      setSyncStatus('ログアウトしました。');
+    } catch (error) {
+      setSyncPhase('error');
+      setSyncStatus(`❌ ${error.message}`);
+    }
+  };
+
+  const runGmailSyncWithAuth = async () => {
+    const token = await getGoogleAccessToken();
+    if (!token) {
+      setReLoginNeeded(true);
+      setSyncPhase('needsLogin');
+      setSyncStatus('⚠️ 再ログインが必要です');
+      return { changed: false };
+    }
+    return runGmailSync(token);
   };
 
   // タイマー/インターバルのコールバックは登録時点のクロージャに固定されがちなので、
@@ -375,18 +337,61 @@ export function useGoogleAuth({
   // 上書きアップロードしてしまう事故を防ぐ）
   const latestRef = useRef({});
   useEffect(() => {
-    latestRef.current = { uploadToCloud, autoSyncCloud, ensureLatest, runGmailSync, trySilentGoogleLogin };
+    latestRef.current = { uploadToCloud, autoSyncCloud, ensureLatest, runGmailSyncWithAuth, refreshServerSession };
   });
+
+  // 起動時はHttpOnly Cookieのサーバーセッションを確認し、成功した場合だけ同期を開始する。
+  useEffect(() => {
+    let cancelled = false;
+    const restoreSession = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const authResult = params.get('auth');
+        if (authResult) {
+          params.delete('auth');
+          const nextUrl = `${window.location.pathname}${params.size ? `?${params}` : ''}${window.location.hash}`;
+          window.history.replaceState(null, '', nextUrl);
+        }
+
+        const session = await getGoogleSession({ force: true });
+        if (cancelled) return;
+        setGoogleUser(session.user);
+        setAuthReady(true);
+        if (!session.authenticated) {
+          localStorage.removeItem('kakeibo_google_user');
+          setSyncPhase('idle');
+          setSyncStatus(authResult && authResult !== 'success'
+            ? '❌ Googleログインを完了できませんでした。もう一度お試しください。'
+            : '');
+          return;
+        }
+        localStorage.setItem('kakeibo_google_user', JSON.stringify(session.user));
+        setSyncStatus(authResult === 'success'
+          ? `✅ ${session.user.email} としてログインしました！`
+          : '🔎 最新のデータを確認中...');
+        latestRef.current.ensureLatest(session.accessToken);
+      } catch (error) {
+        if (cancelled) return;
+        console.error(error);
+        clearGoogleSessionCache();
+        setGoogleUser(null);
+        setAuthReady(true);
+        setSyncPhase('error');
+        setSyncStatus(`❌ ${error.message}`);
+      }
+    };
+    restoreSession();
+    return () => { cancelled = true; };
+  }, []);
 
   // 1) ローカル変更後のデバウンス自動アップロード
   const isFirstTick = useRef(true);
   useEffect(() => {
     if (isFirstTick.current) { isFirstTick.current = false; return; }
-    if (!googleToken) return;
+    if (!googleUser) return;
     const timerId = setTimeout(() => { latestRef.current.uploadToCloud(); }, AUTO_UPLOAD_DEBOUNCE_MS);
     return () => clearTimeout(timerId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localModifiedTick]);
+  }, [localModifiedTick, googleUser]);
 
   // 2) 定期・タブ復帰時の再同期（他デバイス・他タブでの変更を拾う）
   useEffect(() => {
@@ -394,15 +399,11 @@ export function useGoogleAuth({
     let resyncRunning = false;
     const doResync = async () => {
       if (resyncRunning) return;
-      const t = localStorage.getItem('kakeibo_google_token');
-      const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
-      if (t && exp > Date.now()) {
-        resyncRunning = true;
-        try {
-          await latestRef.current.ensureLatest(t);
-        } finally {
-          resyncRunning = false;
-        }
+      resyncRunning = true;
+      try {
+        await latestRef.current.ensureLatest();
+      } finally {
+        resyncRunning = false;
       }
     };
     const intervalId = setInterval(doResync, PERIODIC_RESYNC_MS);
@@ -424,26 +425,13 @@ export function useGoogleAuth({
     };
   }, [googleUser]);
 
-  // 3) トークン失効前の先行サイレント更新（開きっぱなしのタブでも失効パスに入らないようにする）
-  useEffect(() => {
-    if (!googleToken) return;
-    const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
-    if (!exp) return;
-    const delay = (exp - TOKEN_REFRESH_MARGIN_MS) - Date.now();
-    if (delay <= 0) { latestRef.current.trySilentGoogleLogin(); return; }
-    const timerId = setTimeout(() => latestRef.current.trySilentGoogleLogin(), delay);
-    return () => clearTimeout(timerId);
-  }, [googleToken]);
-
   return {
     googleUser,
-    isAuthenticated: Boolean(
-      googleUser
-      && googleToken
-      && parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10) > Date.now()
-    ),
+    authReady,
+    isAuthenticated: Boolean(googleUser),
     syncStatus, syncPhase, reLoginNeeded,
-    handleGoogleLogin, handleGoogleLogout, trySilentGoogleLogin,
+    handleGoogleLogin, handleGoogleLogout,
+    runGmailSync: runGmailSyncWithAuth,
     uploadToCloud, downloadFromCloud, autoSyncCloud, ensureLatest,
   };
 }

@@ -1,16 +1,21 @@
-# React + Vite
+# スマート明細
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Viteで作られた家計簿アプリです。Google Driveへの同期とGmailからの明細取込に対応しています。
 
-Currently, two official plugins are available:
+## 開発
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+npm run dev
+```
 
-## React Compiler
+## デプロイ
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 従来版: `master` ブランチからGitHub Pagesへ自動デプロイ
+- サーバー認証版: Cloudflare Pages + Pages Functions
 
-## Expanding the ESLint configuration
+Cloudflare版の初期設定は [docs/cloudflare-auth-setup.md](docs/cloudflare-auth-setup.md) を参照してください。
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 認証情報の扱い
+
+Googleのクライアントシークレットとセッション暗号鍵は、CloudflareのSecretsにのみ登録します。リポジトリや通常の環境変数ファイルへ実値をコミットしないでください。

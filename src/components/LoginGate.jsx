@@ -9,15 +9,15 @@ const GoogleLogo = () => (
   </svg>
 );
 
-const LoginGate = ({ onLogin, status }) => (
+const LoginGate = ({ onLogin, status, ready = true }) => (
   <main className="login-gate">
     <section className="login-card" aria-labelledby="login-title">
       <div className="login-app-icon"><WalletCards size={30} /></div>
       <h1 id="login-title">スマート明細</h1>
       <p>家計データを安全に同期するため、Googleアカウントでログインしてください。</p>
-      <button type="button" onClick={onLogin} className="google-login-btn">
+      <button type="button" onClick={onLogin} className="google-login-btn" disabled={!ready}>
         <GoogleLogo />
-        Googleでログイン
+        {ready ? 'Googleでログイン' : 'ログイン状態を確認中...'}
       </button>
       {status && <div className="login-status" role="status">{status}</div>}
     </section>

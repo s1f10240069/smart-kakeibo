@@ -101,13 +101,8 @@ export function useGmailSync({ setAllTransactions, touchLocalModified }) {
   // 「要確認」で保留中のメールは日時での絞り込みに関係なく毎回ローカルで再解析し直すため、
   // 一度取りこぼした古いメールもキーワードを直せば拾い直せる。
   const runGmailSync = async (tokenArg) => {
-    // トークンは「googleToken state」ではなく localStorage＋有効期限で判定（useGoogleAuth との循環参照を避ける）
-    let token = tokenArg;
-    if (!token) {
-      const t = localStorage.getItem('kakeibo_google_token');
-      const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
-      token = (t && exp > Date.now()) ? t : '';
-    }
+    // Googleアクセストークンはサーバーセッション経由で呼び出し元から渡し、永続化しない。
+    const token = tokenArg;
     if (!token) return { changed: false };
     const senders = JSON.parse(localStorage.getItem('kakeibo_gmail_senders') || '[]');
     if (senders.length === 0) {

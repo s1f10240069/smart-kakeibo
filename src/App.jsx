@@ -55,28 +55,14 @@ export default function App() {
     },
   });
 
-  // ===== 起動時の自動同期＋メールキャッチアップ =====
-  useEffect(() => {
-    try {
-      const t = localStorage.getItem('kakeibo_google_token');
-      const exp = parseInt(localStorage.getItem('kakeibo_google_token_expiry') || '0', 10);
-      const u = localStorage.getItem('kakeibo_google_user');
-      if (t && exp > Date.now()) {
-        google.ensureLatest(t);
-      } else if (u) {
-        google.trySilentGoogleLogin();
-      }
-    } catch(e) { console.error(e); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ホーム・明細を表示するたびにDriveの更新時刻を確認する。
   // 同時呼び出しはuseGoogleAuth側で1本にまとめられる。
   useEffect(() => {
+    if (!google.isAuthenticated) return;
     if (view !== 'home' && view !== 'list') return;
     google.ensureLatest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, google.isAuthenticated]);
 
   // ===== ホーム遷移を伴う合成ハンドラー =====
   const handleFileUpload = async (e) => { await handleFileUploadRaw(e); setView('home'); };
@@ -94,10 +80,9 @@ export default function App() {
     }
   };
 
-  // 有効なGoogle認証がない間は家計簿本体へ入れない。
-  // 保存済みセッションがある場合は、起動時useEffectのサイレント認証完了後に自動で解除される。
+  // サーバー側のGoogleセッション確認が終わるまで、家計簿本体へ入れない。
   if (!google.isAuthenticated) {
-    return <LoginGate onLogin={google.handleGoogleLogin} status={google.syncStatus} />;
+    return <LoginGate onLogin={google.handleGoogleLogin} status={google.syncStatus} ready={google.authReady} />;
   }
 
   const isCheckingLatest = google.syncPhase === 'checking' || google.syncPhase === 'syncing';
@@ -230,7 +215,7 @@ export default function App() {
                 onAddParseLabel: gmail.addParseLabel,
                 parseLabels: gmail.parseLabels,
                 onRemoveParseLabel: gmail.removeParseLabel,
-                onRunSync: () => gmail.runGmailSync(),
+                onRunSync: google.runGmailSync,
                 syncStatus: gmail.gmailSyncStatus,
                 needsReview: gmail.needsReview,
                 expandedReviewId: gmail.expandedReviewId,
