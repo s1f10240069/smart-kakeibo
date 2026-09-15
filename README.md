@@ -12,9 +12,9 @@ npm run dev
 ## デプロイ
 
 - 従来版: `master` ブランチからGitHub Pagesへ自動デプロイ
-- サーバー認証版: Cloudflare Pages + Pages Functions
+- サーバー認証版: Cloudflare Workers + Static Assets
 
-Cloudflare版の初期設定は [docs/cloudflare-auth-setup.md](docs/cloudflare-auth-setup.md) を参照してください。
+Cloudflare版の初期設定は [docs/cloudflare-auth-setup.md](docs/cloudflare-auth-setup.md) を参照してください。`wrangler versions upload` を使うCloudflare Buildsにも対応しています。
 
 ## 認証情報の扱い
 

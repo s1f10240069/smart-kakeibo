@@ -1,6 +1,6 @@
-# Cloudflare版 Google認証セットアップ
+# Cloudflare Workers版 Google認証セットアップ
 
-この手順では、従来のGitHub Pages版を残したまま、Cloudflare Pages版を別URLで公開します。
+この手順では、従来のGitHub Pages版を残したまま、Cloudflare Workers + Static Assets版を別URLで公開します。ログに `Executing user deploy command: npx wrangler versions upload` と出る構成を対象にしています。
 
 ## 0. 戻し方を確認する
 
@@ -37,17 +37,16 @@ https://www.googleapis.com/auth/gmail.readonly
 
 注意: Publishing statusがTestingの間、Externalアプリのリフレッシュトークンは原則7日で期限切れになります。動作確認後、個人利用の範囲で継続利用する場合はIn productionへの変更を検討してください。`gmail.readonly` は制限付きスコープなので、不特定多数へ公開する場合はGoogleの審査が別途必要です。
 
-## 3. Cloudflare Pagesプロジェクトを作る
+## 3. Cloudflare Workersプロジェクトを作る
 
 1. Cloudflare Dashboardで「Workers & Pages」を開く。
-2. Create applicationからPagesを選択する。
+2. Create applicationからGitHubリポジトリを接続するWorkerを作成する。
 3. GitHubアカウントを接続し、このリポジトリを選ぶ。
 4. Production branchに `feat/server-side-google-auth` を指定する。検証完了後に `master` へ変更してもよい。
-5. Framework presetは `Vite` を選ぶ。
-6. Build commandを `npm run build` にする。
-7. Build output directoryを `dist` にする。
-8. プロジェクト名を決める。以後の例では `smart-kakeibo` とする。
-9. Save and Deployを実行する。
+5. Build commandを `npm run build` にする。
+6. Deploy commandを `npx wrangler versions upload` にする。Cloudflareが自動入力している場合はそのままでよい。
+7. プロジェクト名を `smart-kakeibo` にする。別名を使う場合は `wrangler.jsonc` の `name` も同じ名前へ変更する。
+8. Save and Deployを実行する。
 
 最初のデプロイでは認証用Secretsが未設定なので、画面は表示されてもGoogleログインはまだ成功しません。
 
@@ -55,32 +54,33 @@ https://www.googleapis.com/auth/gmail.readonly
 
 既存のGitHub Pages用クライアントは、戻せるよう変更せずに残します。
 
-1. Google Auth PlatformのClientsを開く。
-2. Create clientを選ぶ。
-3. Application typeに `Web application` を選ぶ。
-4. 名前を `smart-kakeibo-cloudflare` などにする。
-5. Authorized JavaScript originsへCloudflare PagesのURLを追加する。
-6. Authorized redirect URIsへ同じURLのコールバックを追加する。
+1. 初回デプロイ後に表示される `workers.dev` URLを控える。
+2. Google Auth PlatformのClientsを開く。
+3. Create clientを選ぶ。
+4. Application typeに `Web application` を選ぶ。
+5. 名前を `smart-kakeibo-cloudflare` などにする。
+6. Authorized JavaScript originsへWorkersのURLを追加する。
+7. Authorized redirect URIsへ同じURLのコールバックを追加する。
 
 例:
 
 ```text
 Authorized JavaScript origin
-https://smart-kakeibo.pages.dev
+https://smart-kakeibo.<自分のサブドメイン>.workers.dev
 
 Authorized redirect URI
-https://smart-kakeibo.pages.dev/api/auth/google/callback
+https://smart-kakeibo.<自分のサブドメイン>.workers.dev/api/auth/google/callback
 ```
 
-末尾のスラッシュ有無を含め、実際のPages URLと完全に一致させてください。作成後に表示されるClient IDとClient secretを控えます。Client secretはGitHubやソースコードへ保存しません。
+末尾のスラッシュ有無を含め、実際のWorkers URLと完全に一致させてください。作成後に表示されるClient IDとClient secretを控えます。Client secretはGitHubやソースコードへ保存しません。
 
 ## 5. Cloudflareへ環境変数とSecretsを登録する
 
-Cloudflare PagesプロジェクトのSettingsからVariables and Secretsを開き、Production環境へ次を登録します。
+Cloudflare WorkerのSettingsからVariables and Secretsを開き、次を登録します。
 
 | 名前 | 種類 | 値 |
 |---|---|---|
-| `APP_ORIGIN` | Text | `https://smart-kakeibo.pages.dev` |
+| `APP_ORIGIN` | Text | `https://smart-kakeibo.<自分のサブドメイン>.workers.dev` |
 | `GOOGLE_CLIENT_ID` | Text | Googleで作成したClient ID |
 | `GOOGLE_CLIENT_SECRET` | Secret | Googleで作成したClient secret |
 | `SESSION_SECRET` | Secret | 十分に長いランダム文字列 |
@@ -98,9 +98,9 @@ $bytes = New-Object byte[] 48
 
 ## 6. 再デプロイする
 
-1. Cloudflare PagesのDeploymentsを開く。
+1. Cloudflare WorkerのDeploymentsを開く。
 2. 最新デプロイのRetry deploymentを実行する。または対象ブランチへ新しいコミットをpushする。
-3. Production URLを開く。
+3. `workers.dev` のProduction URLを開く。
 4. Googleでログインを押す。
 5. 初回だけGoogleの同意画面でDriveとGmailへのアクセスを許可する。
 6. ログイン後、ページを閉じて開き直しても認証画面が出ないことを確認する。
@@ -123,11 +123,11 @@ $bytes = New-Object byte[] 48
 1. `.dev.vars.example` をコピーして `.dev.vars` を作る。
 2. `.dev.vars` にローカル用Client ID、Client secret、SESSION_SECRETを入れる。
 3. Google OAuthクライアントへ `http://localhost:8788/api/auth/google/callback` を追加する。
-4. ビルド後、Cloudflare WranglerでPages Functionsごと起動する。
+4. ビルド後、Cloudflare WranglerでWorkerとStatic Assetsを起動する。
 
 ```bash
 npm run build
-npx wrangler pages dev dist --port 8788
+npx wrangler dev --port 8788
 ```
 
 `.dev.vars` はGitの除外対象です。
